@@ -1,9 +1,71 @@
 pragma solidity ^0.8.1;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract RealestateNFT is ERC721 {
+contract RealestateNFT is ERC721, Ownable {
+    using Counters for Counters.Counter;
+    using Strings for uint256;
+    Counters.Counter private _tokenIds;
+
+    mapping (uint256 => string) private _tokenURIs;
+    mapping (uint256 => uint256) reserve;
+    mapping (uint256 => uint256) lean1;
+    mapping (uint256 => uint256) lean2;
+
     constructor(string memory name, string memory symbol)
         ERC721(name, symbol)
     {}
+    
+    // Only the Escrow contract can mint this NFT
+    function mint(address recipient, string memory meta_data_uri)
+        public
+        onlyOwner
+        returns(uint256)
+        {
+
+        _tokenIds.increment();
+
+        uint256 newItemId = _tokenIds.current();
+        _mint(recipient, newItemId);
+        _setTokenURI(newItemId, meta_data_uri);
+        
+        return newItemId;
+    }
+
+    // TODO make only transferable via Escrow Contract
+    function transfer(address recipient, uint256 tokenId) public onlyOwner {
+        address seller = ownerOf(tokenId);
+        _transfer(seller, recipient, tokenId);
+    }
+
+    function _setTokenURI(uint256 tokenId, string memory _tokenURI)
+      internal
+      virtual
+    {
+      _tokenURIs[tokenId] = _tokenURI;
+    }
+
+    // Zero out the Lean1 and Reserve balances
+    function _zeroBalances(uint256 tokenId) internal {
+        uint256 lean = lean1[tokenId];
+        if (lean > 0) {
+            uint256 r = reserve[tokenId];
+            uint256 diff= r - lean;
+            if (diff >= 0) {
+                reserve[tokenId] = r - diff;
+                lean1[tokenId] = 0;
+            } else {
+                reserve[tokenId] = 0;
+                lean1[tokenId] = lean - r;
+            }
+        }
+    }
+
+    modifier leanPaid(uint256 tokenId) {
+        _zeroBalances(tokenId);
+        require(lean1[tokenId] > 0, "Balances in lean1 must be fully paid out");
+        _;
+    }
 }
