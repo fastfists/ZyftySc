@@ -5,7 +5,7 @@ import "./RealestateNFT.sol";
 
 contract RealestateEscrow is Ownable {
     // TODO will there be a unique escrow contract for each person, or just a single escrow contract
-    RealestateNFT nft;
+    RealestateNFT public nft;
 
     enum PropertyState {NORMAL, DELETED}
 
@@ -66,20 +66,20 @@ contract RealestateEscrow is Ownable {
         public
         payable
         {
-        require(accounts[id].listed);
-        require(msg.value >= accounts[id].price);
+        require(accounts[id].listed, "This property is not listed");
+        require(msg.value >= accounts[id].price, "Price is too low");
         _zeroBalances(id); // TODO might not be a good idea to keep this around
-        require(accounts[id].lean1 > 0, "Balances in lean1 must be fully paid out");
+        require(accounts[id].lean1 == 0, "Balances in lean1 must be fully paid out");
 
         accounts[id].listed = false;
-        address oldOwner = accounts[id].owner;
+        address payable oldOwner = accounts[id].owner;
         // Send profits from sale to the owner
         oldOwner.transfer(accounts[id].price);
 
         nft.transferFrom(address(this), msg.sender, id);
 
-        accounts[id].owner = msg.sender;
-        emit E_PropertySold(id, oldOwner, msg.sener);
+        accounts[id].owner = payable(msg.sender);
+        emit E_PropertySold(id, oldOwner, msg.sender);
     }
 
     function _zeroBalances(uint256 tokenId) internal {
@@ -121,6 +121,14 @@ contract RealestateEscrow is Ownable {
         accounts[tokenId].reserve += delta;
 
         return accounts[tokenId].reserve;
+    }
+
+    function getProperty(uint256 id)
+        public
+        view
+        returns(Account memory)
+        {
+            return accounts[id];
     }
 
     modifier ownerOrHolder(uint256 tokenId) {
