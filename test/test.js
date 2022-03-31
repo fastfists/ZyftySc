@@ -52,4 +52,9 @@ describe("RealEstateEscrow", function () {
         const [owner, signer1] = await ethers.getSigners();
 
     });
+
+    it("Tests adding value from lean1 to lean2", async function() {
+        const [owner, signer1] = await ethers.getSigners();
+
+    });
 });

@@ -7,7 +7,7 @@ contract RealestateEscrow is Ownable {
     // TODO will there be a unique escrow contract for each person, or just a single escrow contract
     RealestateNFT public nft;
 
-    enum PropertyState {NORMAL, DELETED}
+    enum PropertyState {NORMAL, PENDING_LEAN2_ACCEPT, DELETED}
 
     struct Account {
         address payable owner;
@@ -17,6 +17,7 @@ contract RealestateEscrow is Ownable {
         uint256 lean2;
 
         uint256 price;
+        uint256 amountProposed;
         bool listed;
         PropertyState state;
     }
@@ -24,6 +25,8 @@ contract RealestateEscrow is Ownable {
     mapping(uint256 => Account) accounts;
 
     event E_PropertyMade(uint256 tokenID);
+    event E_Lean2TransferProposed(uint256 indexed tokenID, uint256 amount);
+    event E_Lean2TransferAccepted(uint256 id, uint256 amount);
     event E_PropertyListed(uint256 tokenID);
     event E_PropertySold(uint256 indexed tokenID, address from, address to);
     event E_PropertyTaken(uint256 indexed tokenID);
@@ -51,6 +54,51 @@ contract RealestateEscrow is Ownable {
 
         emit E_PropertyMade(id);
         return id;
+    }
+
+    // Transfers amountToTransfer from lean1 into lean2, requires
+    // owner of contract to sign
+    function proposeLean2Transfer(uint256 id, uint256 amountToTransfer) 
+        public
+        onlyHolder(id)
+        {
+        require(accounts[id].lean1 >= amountToTransfer, "Amount to transfer is too high " + accounts[id].lean1 + "< " + amountToTransfer);
+        acounts[id].state = PropertyState.PENDING_LEAN2_ACCEPT;
+        acounts[id].amountProposed = amountToTransfer;
+        emit E_Lean2TransferProposed(id, amountToTransfer);
+    }
+
+    function acceptLean2Transfer(uint256 id, uint256 amount)
+        public
+        onlyOwner
+        inState(PropertyState.PENDING_LEAN2_ACCEPT)
+        {
+        acounts[id].lean2 = acounts[id].amountProposed;
+        accounts[id].lean1 -= acounts[id].amountProposed;
+        acounts[id].state = PropertyState.NORMAL;
+        emit E_Lean2TransferAccepted(id, amountToTransfer);
+    }
+
+    function denyLean2Transfer(uint256 id) 
+        public
+        onlyOwner
+        inState(PropertyState.PENDING_LEAN2_ACCEPT)
+        {
+        acounts[id].state = PropertyState.NORMAL;
+        emit E_Lean2TransferDenied(id, amountToTransfer);
+    }
+
+    // Decreases value in lean2
+    // TODO does this value go from lean2 -> lean1 or does it just poof?
+    function decreaseLean2(uint256 id, uint256 amount)
+        public
+        onlyOwner
+        returns(uint256)
+        {
+        require(acounts[id].lean2 >= amount, "Amount is too high " + amount);
+        acounts[id].lean2 -= amount;
+        acounts[id].lean1 += amount;
+        return acounts[id].lean2;
     }
 
     function listProperty(uint256 id, uint256 price)
@@ -136,8 +184,13 @@ contract RealestateEscrow is Ownable {
         _;
     }
 
-    modifier holderOnly(uint256 tokenId) {
+    modifier onlyHolder(uint256 tokenId) {
         require(nft.ownerOf(tokenId) == msg.sender, "You must be the holder of the NFT");
+        _;
+    }
+
+    modifier inState(uint256 id, PropertyState state) {
+        require(accounts[id].state == state, "Currently in incorrect state");
         _;
     }
     
