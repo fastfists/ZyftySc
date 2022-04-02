@@ -25,11 +25,14 @@ contract RealestateEscrow is Ownable {
     mapping(uint256 => Account) accounts;
 
     event E_PropertyMade(uint256 tokenID);
-    event E_Lean2TransferProposed(uint256 indexed tokenID, uint256 amount);
-    event E_Lean2TransferAccepted(uint256 id, uint256 amount);
-    event E_PropertyListed(uint256 tokenID);
     event E_PropertySold(uint256 indexed tokenID, address from, address to);
     event E_PropertyTaken(uint256 indexed tokenID);
+
+    event E_Lean2TransferProposed(uint256 indexed tokenID, uint256 amount);
+    event E_Lean2TransferAccepted(uint256 id, uint256 amount);
+    event E_Lean2TransferDenied(uint256 id, uint256 amountToTransfer);
+    event E_PropertyListed(uint256 tokenID);
+
 
     constructor() {
         nft = new RealestateNFT("ZyftyNFT", "ZNFT");
@@ -50,6 +53,7 @@ contract RealestateEscrow is Ownable {
                                 listed: false,
                                 price: 0,
                                 state: PropertyState.NORMAL,
+                                amountProposed: 0,
                                 owner: payable(msg.sender)});
 
         emit E_PropertyMade(id);
@@ -62,30 +66,32 @@ contract RealestateEscrow is Ownable {
         public
         onlyHolder(id)
         {
-        require(accounts[id].lean1 >= amountToTransfer, "Amount to transfer is too high " + accounts[id].lean1 + "< " + amountToTransfer);
-        acounts[id].state = PropertyState.PENDING_LEAN2_ACCEPT;
-        acounts[id].amountProposed = amountToTransfer;
-        emit E_Lean2TransferProposed(id, amountToTransfer);
+        require(accounts[id].lean1 >= amountToTransfer, "Amount to transfer is too high");
+        accounts[id].state = PropertyState.PENDING_LEAN2_ACCEPT;
+        accounts[id].amountProposed = amountToTransfer;
+        emit E_Lean2TransferProposed(id, accounts[id].amountProposed);
     }
 
     function acceptLean2Transfer(uint256 id, uint256 amount)
         public
         onlyOwner
-        inState(PropertyState.PENDING_LEAN2_ACCEPT)
+        inState(id, PropertyState.PENDING_LEAN2_ACCEPT)
         {
-        acounts[id].lean2 = acounts[id].amountProposed;
-        accounts[id].lean1 -= acounts[id].amountProposed;
-        acounts[id].state = PropertyState.NORMAL;
-        emit E_Lean2TransferAccepted(id, amountToTransfer);
+        accounts[id].lean2 = accounts[id].amountProposed;
+        accounts[id].lean1 -= accounts[id].amountProposed;
+        accounts[id].state = PropertyState.NORMAL;
+        emit E_Lean2TransferAccepted(id, accounts[id].amountProposed);
     }
 
     function denyLean2Transfer(uint256 id) 
         public
         onlyOwner
-        inState(PropertyState.PENDING_LEAN2_ACCEPT)
+        inState(id, PropertyState.PENDING_LEAN2_ACCEPT)
         {
-        acounts[id].state = PropertyState.NORMAL;
-        emit E_Lean2TransferDenied(id, amountToTransfer);
+        accounts[id].state = PropertyState.NORMAL;
+        uint256 proposed = accounts[id].amountProposed;
+        accounts[id].amountProposed = 0;
+        emit E_Lean2TransferDenied(id, proposed);
     }
 
     // Decreases value in lean2
@@ -95,10 +101,10 @@ contract RealestateEscrow is Ownable {
         onlyOwner
         returns(uint256)
         {
-        require(acounts[id].lean2 >= amount, "Amount is too high " + amount);
-        acounts[id].lean2 -= amount;
-        acounts[id].lean1 += amount;
-        return acounts[id].lean2;
+        require(accounts[id].lean2 >= amount, "Amount is too high");
+        accounts[id].lean2 -= amount;
+        accounts[id].lean1 += amount;
+        return accounts[id].lean2;
     }
 
     function listProperty(uint256 id, uint256 price)
@@ -154,7 +160,10 @@ contract RealestateEscrow is Ownable {
         if (accounts[tokenId].lean1 > accounts[tokenId].thresholdLean) {
             // Delete the NFT
             accounts[tokenId].state = PropertyState.DELETED;
-            revert("NFT deleted");
+            emit E_PropertyTaken(tokenId);
+            // move from previous owner to the Contract Holder
+            // TODO Delete NFT
+            // nft.transferFrom(accounts[tokenId].owner, msg.sender, tokenId);
         }
         return accounts[tokenId].lean1;
     }

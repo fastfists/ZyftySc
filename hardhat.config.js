@@ -1,7 +1,7 @@
 /**
  * @type import('hardhat/config').HardhatUserConfig
  */
-
+require('solidity-coverage')
 require("@nomiclabs/hardhat-waffle");
 module.exports = {
     solidity: {
