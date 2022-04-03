@@ -31,16 +31,18 @@ contract RealestateNFT is ERC721, Ownable {
         return newItemId;
     }
 
-    function transfer(address recipient, uint256 tokenId) public onlyOwner {
-        address seller = ownerOf(tokenId);
-        _transfer(seller, recipient, tokenId);
-    }
-
     function _setTokenURI(uint256 tokenId, string memory _tokenURI)
       internal
       virtual
     {
       _tokenURIs[tokenId] = _tokenURI;
+    }
+    
+    function burn(uint256 tokenId)
+        public
+        onlyOwner
+        {
+        _burn(tokenId);
     }
 
 }

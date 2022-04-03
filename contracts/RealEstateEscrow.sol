@@ -96,11 +96,13 @@ contract RealestateEscrow is Ownable {
 
     // Decreases value in lean2
     // TODO does this value go from lean2 -> lean1 or does it just poof?
+    // TODO This could potentially be dangerous...
     function decreaseLean2(uint256 id, uint256 amount)
         public
         onlyOwner
         returns(uint256)
         {
+        require(amount > 0, "Must be a positive number");
         require(accounts[id].lean2 >= amount, "Amount is too high");
         accounts[id].lean2 -= amount;
         accounts[id].lean1 += amount;
@@ -139,15 +141,16 @@ contract RealestateEscrow is Ownable {
     function _zeroBalances(uint256 tokenId) internal {
         Account memory a = accounts[tokenId];
         if (a.lean1 > 0) {
-            uint256 diff = a.reserve - a.lean1;
+            int256 diff = int256(a.reserve) - int256(a.lean1);
             if (diff >= 0) {
-                a.reserve -= diff;
+                a.reserve -= a.lean1;
                 a.lean1 = 0;
             } else {
                 a.reserve = 0;
                 a.lean1 -= a.reserve;
             }
         }
+        accounts[tokenId] = a;
     }
 
     // Changes lean1 by adding or subtract delta, requires owners signature
@@ -158,26 +161,52 @@ contract RealestateEscrow is Ownable {
         {
         accounts[tokenId].lean1 += delta;
         if (accounts[tokenId].lean1 > accounts[tokenId].thresholdLean) {
-            // Delete the NFT
-            accounts[tokenId].state = PropertyState.DELETED;
-            emit E_PropertyTaken(tokenId);
-            // move from previous owner to the Contract Holder
-            // TODO Delete NFT
-            // nft.transferFrom(accounts[tokenId].owner, msg.sender, tokenId);
+            // For now only change lean before removing the NFT
+            _zeroBalances(tokenId);
+            if (accounts[tokenId].lean1 > accounts[tokenId].thresholdLean) {
+                // Delete the NFT
+                accounts[tokenId].state = PropertyState.DELETED;
+                emit E_PropertyTaken(tokenId);
+                // Delete the NFT
+                nft.burn(tokenId);
+            }
         }
         return accounts[tokenId].lean1;
     }
 
-    // Changes reserve by adding or subtracting delta, requires either the owner
+    // Changes reserve by adding, requires either the owner
     // of the token, or the owner of the escrow contract
     function changeReserve(uint256 tokenId, uint256 delta)
         public
+        payable
         ownerOrHolder(tokenId)
         returns(uint256)
         {
+        require(delta >= 0, "Must be positive increase only");
+        require(msg.value == delta, "Value must be equal to delta");
         accounts[tokenId].reserve += delta;
 
         return accounts[tokenId].reserve;
+    }
+
+    function redeemReserve(uint256 id, uint256 delta)
+        public
+        onlyHolder(id)
+        returns(uint256)
+        {
+        require(accounts[id].reserve >= delta, "Not enough money in account");
+        payable(msg.sender).transfer(delta);
+
+        accounts[id].reserve -= delta;
+        return accounts[id].reserve;
+    }
+
+    function getBalance()
+        public
+        view
+        returns(uint256)
+        {
+        return address(this).balance;
     }
 
     function getProperty(uint256 id)

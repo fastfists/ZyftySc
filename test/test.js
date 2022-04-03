@@ -78,6 +78,7 @@ describe("RealEstateEscrow", function () {
         a = await this.escrow.getProperty(this.id);
         expect(a.lean1).to.equal(this.threshold);
 
+        expect(await this.nft.balanceOf(this.signer1.address)).to.equal(1);
         // Restrict others from accessing changeLean
         await expect(this.buyerConn.changeLean(this.id, this.threshold - 1)).to.be.reverted;
 
@@ -88,8 +89,8 @@ describe("RealEstateEscrow", function () {
         a = await this.escrow.getProperty(this.id);
         // 2 == PropertyState.DELETED
         expect(a.state).to.equal(2);
-        // Should not exist, and get reverted
-        expect(this.nft.ownerOf(this.id)).to.be.reverted;
+        // Should no longer own the NFT
+        expect(await this.nft.balanceOf(this.signer1.address)).to.equal(0);
     });
 
     it("Tests adding value from lean1 to lean2", async function() {
@@ -139,10 +140,72 @@ describe("RealEstateEscrow", function () {
         expect(a.lean2).to.equal(0);
 
         await this.ownerConn.denyLean2Transfer(this.id);
-        // a = await this.ownerConn.getProperty(this.id);
-        // expect(a.lean1).to.equal(val);
-        // expect(a.lean2).to.equal(0);
-        // expect(a.state).to.be.equal(0);
-
+        a = await this.ownerConn.getProperty(this.id);
+        expect(a.lean1).to.equal(val);
+        expect(a.lean2).to.equal(0);
+        expect(a.state).to.be.equal(0);
     });
+
+    it("Tests adding value from lean1 to lean2, and back into lean1", async function() {
+        var a = await this.escrow.getProperty(this.id);
+        expect(a.lean1).to.equal(0);
+        expect(a.lean2).to.equal(0);
+
+        const val = ethers.utils.parseEther('4');
+        await this.ownerConn.changeLean(this.id, val);
+
+        await expect(this.buyerConn.proposeLean2Transfer(this.id, this.threshold)).to.be.reverted;
+        await this.buyerConn.proposeLean2Transfer(this.id, val)
+        a = await this.escrow.getProperty(this.id);
+
+        // 1 == PropertyState.PENDING_LEAN2_ACCEPT
+        expect(a.state).to.equal(1);
+        expect(a.amountProposed).to.equal(val);
+        expect(a.lean1).to.equal(val);
+        expect(a.lean2).to.equal(0);
+
+        await this.ownerConn.acceptLean2Transfer(this.id, val);
+        a = await this.ownerConn.getProperty(this.id);
+        expect(a.lean2).to.equal(val);
+        expect(a.lean1).to.equal(0);
+        a = await this.ownerConn.getProperty(this.id);
+
+        await this.ownerConn.decreaseLean2(this.id, val);
+        a = await this.escrow.getProperty(this.id);
+        expect(a.lean1).to.equal(val);
+        expect(a.lean2).to.equal(0);
+    });
+    
+    it("Should add to reserve, and redeem from reserve", async function() {
+        const val = ethers.utils.parseEther('10');
+
+        await expect(this.ownerConn.changeReserve(this.id, val)).to.be.reverted;
+        await this.ownerConn.changeReserve(this.id, val, {value: val});
+        expect(await this.escrow.getBalance()).to.equal(val);
+
+        await this.buyerConn.redeemReserve(this.id, val);
+        expect(await this.escrow.getBalance()).to.equal(0);
+        // maybe check the money went to the right address
+    });
+
+    it("Should not delete NFT, if value exceeds, but reserve has money left", async function() {
+        const val = ethers.utils.parseEther('10');
+        const leanVal = ethers.utils.parseEther('9');
+        const expectedLeft = ethers.utils.parseEther('1');
+
+        await expect(this.ownerConn.changeReserve(this.id, val)).to.be.reverted;
+        await this.ownerConn.changeReserve(this.id, val, {value: val});
+        expect(await this.escrow.getBalance()).to.equal(val);
+
+        await this.ownerConn.changeLean(this.id, leanVal);
+        expect(await this.nft.balanceOf(this.signer1.address)).to.equal(1);
+
+        a = await this.escrow.getProperty(this.id);
+        // 0 == PropertyState.NORMAL
+        expect(a.state).to.equal(0);
+        expect(a.lean1).to.equal(0);
+        expect(a.reserve).to.equal(expectedLeft);
+        // Should still own the NFT
+    });
+    
 });
