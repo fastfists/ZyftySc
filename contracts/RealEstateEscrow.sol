@@ -77,6 +77,7 @@ contract RealestateEscrow is Ownable {
         onlyOwner
         inState(id, PropertyState.PENDING_LEAN2_ACCEPT)
         {
+        require(amount == accounts[id].amountProposed);
         accounts[id].lean2 = accounts[id].amountProposed;
         accounts[id].lean1 -= accounts[id].amountProposed;
         accounts[id].state = PropertyState.NORMAL;
@@ -218,11 +219,13 @@ contract RealestateEscrow is Ownable {
     }
 
     modifier ownerOrHolder(uint256 tokenId) {
+        require(accounts[tokenId].state != PropertyState.DELETED, "NFT is deleted");
         require(nft.ownerOf(tokenId) == msg.sender || owner() == msg.sender, "You must be the holder or the distributor");
         _;
     }
 
     modifier onlyHolder(uint256 tokenId) {
+        require(accounts[tokenId].state != PropertyState.DELETED, "NFT is deleted");
         require(nft.ownerOf(tokenId) == msg.sender, "You must be the holder of the NFT");
         _;
     }
@@ -231,5 +234,4 @@ contract RealestateEscrow is Ownable {
         require(accounts[id].state == state, "Currently in incorrect state");
         _;
     }
-    
 }
