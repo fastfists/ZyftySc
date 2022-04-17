@@ -81,4 +81,12 @@ describe("RealEstateNFT", function () {
         );
         expect(await this.token.balanceOf(this.owner.address)).to.equal(this.tokenBalance - this.lean1Val - this.lean2Val);
     });
+
+    it("Adds money and redeems money from a reserve", async function() {
+        await this.p1Conn.increaseReserve(this.id, {value: 20});
+        await expect(this.p1Conn.redeemReserve(this.id, 20)).to.be.reverted;
+        await expect(this.ownerConn.redeemReserve(this.id, 50)).to.be.reverted;
+        await this.ownerConn.redeemReserve(this.id, 19);
+        await this.ownerConn.redeemReserve(this.id, 1);
+    });
 });

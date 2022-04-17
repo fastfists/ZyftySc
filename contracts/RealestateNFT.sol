@@ -9,7 +9,6 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 contract RealestateNFT is ERC721, Ownable {
     using Counters for Counters.Counter;
     using Strings for uint256;
-    enum PropertyState {NORMAL, PENDING_LEAN2_ACCEPT, DELETED}
     Counters.Counter private _tokenIds;
 
     mapping (uint256 => string) private _tokenURIs;
@@ -29,14 +28,10 @@ contract RealestateNFT is ERC721, Ownable {
         Lean lean2;
         Lean lean3;
 
-        PropertyState state;
         Counters.Counter leanCount;
     }
 
     mapping(uint256 => Account) accounts;
-
-    event E_PropertyMade(uint256 tokenID);
-    event E_PropertyTaken(uint256 indexed tokenID);
 
     constructor()
         ERC721("RealestateNFT", "RNFT")
@@ -65,7 +60,6 @@ contract RealestateNFT is ERC721, Ownable {
             ),
             lean2: Lean(0, address(0), false, address(0)),
             lean3: Lean(0, address(0), false, address(0)),
-            state: PropertyState.NORMAL,
             leanCount: Counters.Counter(1)
         });
         
@@ -79,27 +73,40 @@ contract RealestateNFT is ERC721, Ownable {
       _tokenURIs[tokenId] = _tokenURI;
     }
 
+    function increaseReserve(uint256 tokenID) public payable {
+        accounts[tokenID].reserve += msg.value;
+    }
+
+    function redeemReserve(uint256 tokenID, uint256 value) 
+        public 
+        {
+        address owner = ownerOf(tokenID);
+        require(msg.sender == owner);
+        require(accounts[tokenID].reserve >= value);
+        payable(owner).transfer(value);
+        accounts[tokenID].reserve -= value;
+    }
+
     function getLean(uint256 tokenID, uint8 leanID)
         public
         view
         returns(Lean memory)
         {
         if (leanID == 1) return accounts[tokenID].primaryLean;
-        if (leanID == 2) return accounts[tokenID].lean2;
-        if (leanID == 3) return accounts[tokenID].lean3;
+        else if (leanID == 2) return accounts[tokenID].lean2;
+        else return accounts[tokenID].lean3; // leandID == 3
     }
 
     function addLean(uint256 tokenID, uint256 value, address leanProvider, bool dynamicCost, address assetType)
         public
-        onlyOwner 
         returns(uint8) {
+        require(msg.sender == ownerOf(tokenID));
         accounts[tokenID].leanCount.increment();
         uint8 leanId = uint8(accounts[tokenID].leanCount.current());
         if (leanId == 2) {
             accounts[tokenID].lean2 = Lean({value: value, leanProvider: leanProvider, dynamicCost: dynamicCost, assetType: assetType});
-        } else if (leanId == 3) {
+        } else // (leanId == 3) {
             accounts[tokenID].lean3 = Lean({value: value, leanProvider: leanProvider, dynamicCost: dynamicCost, assetType: assetType});
-        }
         
         return leanId;
     }
@@ -107,10 +114,10 @@ contract RealestateNFT is ERC721, Ownable {
     // Changes lean1 by adding or subtract delta, requires owners signature
     function payLean(uint256 tokenID, uint8 leanID, address assetType, uint256 amount)
         public
-        onlyOwner
         payable
         returns(uint256)
         {
+        require(msg.sender == ownerOf(tokenID));
         Lean memory l = getLean(tokenID, leanID);
         require(assetType == l.assetType, "Incorrect asset type");
         IERC20 token = IERC20(l.assetType);
@@ -119,6 +126,7 @@ contract RealestateNFT is ERC721, Ownable {
         require(token.allowance(msg.sender, address(this)) >= amount, "Insuffecient Funds");
         token.transferFrom(msg.sender, l.leanProvider, amount);
         setLean(tokenID, leanID, l.value - amount);
+        return l.value - amount;
     }
 
     modifier onlyLeanProviderOf(uint256 tokenID, uint8 leanID) {
@@ -142,8 +150,17 @@ contract RealestateNFT is ERC721, Ownable {
             accounts[tokenID].primaryLean.value = value;
         else if (leanID == 2)
             accounts[tokenID].lean2.value = value;
-        else if (leanID == 3)
+        else // if (leanID == 3)
             accounts[tokenID].lean3.value = value;
+    }
+
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenID
+    ) internal override {
+        // Require 1st lean to be satisified
+        require(accounts[tokenID].primaryLean.value == 0); 
     }
 
 }
