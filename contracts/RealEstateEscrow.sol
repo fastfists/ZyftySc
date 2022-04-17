@@ -136,6 +136,7 @@ contract RealestateEscrow is Ownable {
         IERC20 token = IERC20(propertyListing[id].asset);
         nft.transferFrom(address(this), buyer, propertyListing[id].tokenID);
         token.transfer(seller, propertyListing[id].price);
+        emit E_PropertySold(id, seller, buyer);
     }
 
     modifier withinWindow(uint256 id) {
