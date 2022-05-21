@@ -9,20 +9,20 @@ function sleep(ms) {
 
 // Tests should be ran on localhost test network
 // Run command `npx hardhat test --network localhost` to test this code
-describe("RealEstateEscrow", function () {
+describe("ZyftySalesContract", function () {
 
     beforeEach(async function() { 
-        const ESCROW_FACTORY = await ethers.getContractFactory("RealestateEscrow");
+        const ESCROW_FACTORY = await ethers.getContractFactory("ZyftySalesContract");
         const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
-        const NFT_FACTORY = await hre.ethers.getContractFactory("RealestateNFT");
+        const NFT_FACTORY = await hre.ethers.getContractFactory("ZyftyNFT");
 
-        [this.seller, this.buyer, this.lean2Provider] = await ethers.getSigners();
+        [this.seller, this.buyer, this.lean2Provider, this.zyftyAdmin] = await ethers.getSigners();
 
         this.tokenBalance = 50;
 
         this.time = 5;
-        this.escrow = await ESCROW_FACTORY.deploy();
-        this.nft = await NFT_FACTORY.deploy();
+        this.escrow = await ESCROW_FACTORY.deploy(this.zyftyAdmin.address);
+        this.nft = await NFT_FACTORY.deploy(this.seller.address);
         this.token = await TOKEN_FACTORY.deploy(this.seller.address, this.buyer.address, this.lean2Provider.address);
         this.price = 10;
 
@@ -41,7 +41,7 @@ describe("RealEstateEscrow", function () {
         this.buyerConn = this.escrow.connect(this.buyer);
         this.sellerConn = this.escrow.connect(this.seller);
 
-        await this.sellerConn.listProperty(
+        await this.sellerConn.sellProperty(
             this.nft.address, 
             this.id,  // tokenID
             this.token.address,
@@ -62,7 +62,8 @@ describe("RealEstateEscrow", function () {
         await sleep(this.time*1000);
         await this.sellerConn.execute(this.id);
 
-        expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price + this.tokenBalance);
+        const fee = this.price/200;
+        expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price - fee + this.tokenBalance);
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.price);
 
         expect(await this.nft.balanceOf(this.seller.address)).to.equal(0);
@@ -94,6 +95,4 @@ describe("RealEstateEscrow", function () {
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance);
     });
 
-
-    
 });
