@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-// import "contracts/ZyftyNFT.sol";
+import "contracts/ZyftyNFT.sol";
 
 contract TestToken is ERC20 {
     constructor(address a, address b, address c) ERC20("TestToken", "TT"){

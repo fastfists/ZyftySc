@@ -83,7 +83,7 @@ contract ZyftyNFT is ERC721, Ownable {
     {
         require(ownerOf(tokenID) == msg.sender);
         Account storage acc = accounts[tokenID];
-        uint8 num = acc.lienCount.current();
+        uint256 num = acc.lienCount.current();
         require(num < 4, "No more than 4 liens are allowed");
         acc.lienCount.increment();
         acc.nextLien.increment();
