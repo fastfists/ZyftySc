@@ -21,7 +21,7 @@ describe("Lien Contracts", function () {
 
         this.tokenBalance = 50;
         this.lienValue = 10;
-        this.period = 30; // Every 30 seconds
+        this.period = 5; // Every 5 seconds
 
         this.token = await TOKEN_FACTORY.deploy(this.ot.address, this.buyer.address, this.provider.address);
         this.lienStatic = await LIEN_FACTORY.deploy(this.provider.address, this.lienValue, this.token.address);
@@ -37,7 +37,7 @@ describe("Lien Contracts", function () {
         this.buyerStatic = this.lienStatic.connect(this.buyer);
     });
 
-    it("Static lean finishes successful", async function() {
+    it("Static lien finishes successful", async function() {
         expect(await this.lienStatic.balance()).to.equal(this.lienValue);
 
         // Lien is given full allowance 
@@ -53,7 +53,7 @@ describe("Lien Contracts", function () {
 
     });
 
-    it("Static lean does not overdraft when paid with non-zero balance", async function() {
+    it("Static lien does not overdraft when paid with non-zero balance", async function() {
         // Should work from previous test
         await this.token.connect(this.buyer).approve(this.lienStatic.address, this.tokenBalance);
         await this.buyerStatic.pay(this.lienValue);
@@ -67,7 +67,7 @@ describe("Lien Contracts", function () {
         expect(await this.lienStatic.balance()).to.equal(0);
     });
 
-    it("Static leans with failed transaction", async function() {
+    it("Static liens with failed transaction", async function() {
         expect(await this.lienStatic.balance()).to.equal(this.lienValue);
 
         // Lien is given half the expected allowance 
@@ -76,6 +76,25 @@ describe("Lien Contracts", function () {
 
         // Balance should remain the same after transaction
         expect(await this.lienStatic.balance()).to.equal(this.lienValue);
+    });
+
+    it("Tests parametric lien updates value", async function() {
+        expect(await this.lienParametric.balance()).to.equal(0);
+        sleep(this.period*1000);
+        // Balance should not automatically be updated
+        expect(await this.lienParametric.balance()).to.equal(0);
+        await this.lienParametric.update();
+        expect(await this.lienParametric.balance()).to.equal(this.lienValue);
+    });
+
+    it("Tests parametric lien updates on pay", async function() {
+        expect(await this.lienParametric.balance()).to.equal(0);
+        await this.token.connect(this.buyer).approve(this.lienStatic.address, this.tokenBalance);
+        // wait 2 periods, value should be lienValue*2
+        sleep(this.period*1000*2);
+        await this.buyerConn.pay(this.tokenBalance);
+
+        expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.lienValue*2);
     });
 
 });
