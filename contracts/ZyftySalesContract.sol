@@ -52,10 +52,9 @@ contract ZyftySalesContract is Ownable {
         admin = zyftyAdmin;
     }
 
-    function sellPropertyBuyer(
+    function sellProperty(
             address nftContract,
             uint256 tokenId,
-            address asset,
             uint256 price,
             uint256 time,
             address buyer)
@@ -63,14 +62,15 @@ contract ZyftySalesContract is Ownable {
         returns(uint256)
         {
         require(nftContract != address(0), "NFT Contract is zero address");
-        IERC721 nft = IERC721(nftContract);
+        ZyftyNFT nft = ZyftyNFT(nftContract);
         nft.transferFrom(msg.sender, address(this), tokenId);
+        nft.updateLiens(tokenId);
         _propertyIds.increment();
         uint256 id =_propertyIds.current();
         propertyListing[id] = ListedProperty({nftContract: nftContract,
                                               tokenID: tokenId,
                                               time: time,
-                                              asset: asset,
+                                              asset: nft.asset(tokenId),
                                               price: price,
                                               buyer: buyer,
                                               seller: msg.sender,
@@ -84,11 +84,10 @@ contract ZyftySalesContract is Ownable {
     function sellProperty(
             address nftContract,
             uint256 tokenId,
-            address asset,
             uint256 price,
             uint256 time)
             public {
-        sellPropertyBuyer(nftContract, tokenId, asset, price, time, address(0));
+        sellProperty(nftContract, tokenId, price, time, address(0));
     }
 
     function buyProperty(uint256 id) 

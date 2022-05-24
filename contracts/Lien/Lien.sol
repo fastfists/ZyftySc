@@ -10,6 +10,9 @@ contract Lien is ILien {
     address private tokenAddr;
     uint256 private value;
 
+    event LienIncreased(uint256 amount);
+    event LienDecreased(uint256 amount);
+
     constructor(address _provider, uint256 _value, address assetType) {
         provider = _provider;
         tokenAddr = assetType;
@@ -19,8 +22,10 @@ contract Lien is ILien {
     /*
      * @dev Pays `amount` tokens of the default asset to the `lienProvider()`
      *      on payment update() is called 
+     *      
+     *      Returns the amount of funds that the transaction did not use.
      */
-    function pay(uint256 amount) public virtual override {
+    function pay(uint256 amount) public virtual override returns(uint256){
         update();
         IERC20 token = IERC20(asset());
         if (amount >= value) {
@@ -28,7 +33,7 @@ contract Lien is ILien {
             amount = value;
         }
         token.transferFrom(msg.sender, lienProvider(), amount);
-        decreaseLien(amount);
+        return decreaseLien(amount);
     }
     /*
      * @dev Updates the `balance()` of the lien, this is called
@@ -43,6 +48,7 @@ contract Lien is ILien {
      * @dev Sets `lienProvider()` to `newProvider``
      */
     function setLienProvider(address newProvider) public virtual override {
+        require(provider == msg.sender);
         provider = newProvider;
     }
 
@@ -69,21 +75,26 @@ contract Lien is ILien {
 
     /**
      * @dev Increases the value of the lien by `amount`, meant to be called by subclasses
+     *      Emits an event that the lien increased
      */
     function increaseLien(uint256 amount) internal {
         value += amount;
+        emit LienIncreased(amount);
     }
 
     /**
      * @dev Decreases the value of the lien by `amount`, meant to be called by subclasses
-     *      if value, will become negative as a result of this, it returns the remainder.
+     *      if value, will become negative as a result of this, it returns the amount unused.
      */
     function decreaseLien(uint256 amount) internal returns(uint256 remainder) {
         remainder = 0;
         if (amount >= value) {
             remainder = amount - value;
+            value = 0;
+            emit LienDecreased(value);
+        } else {
+            value -= amount;
+            emit LienDecreased(amount);
         }
-        value -= amount;
     }
-
 }

@@ -6,45 +6,40 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "contracts/Lien/ILien.sol";
 
 contract ZyftyNFT is ERC721, Ownable {
     using Counters for Counters.Counter;
     using Strings for uint256;
     Counters.Counter private _tokenIds;
 
-
-    struct Lien {
-        uint256 value;
-        address lienProvider;
-        bool dynamicCost;
-
-        address assetType;
-    }
+    event LienAdded(uint256 indexed tokenID, uint256 lienID, address lienAddress);
+    event LienProposed(uint256 indexed tokenID, address lienAddress);
 
     struct Account {
-        // uint256 thresholdLien;
         uint256 reserve;
-        Lien primaryLien; // id 0
-        Counters.Counter lienCount;
-        Counters.Counter nextLien;
+        address asset;
+        address primaryLien; // id 0
+        address proposedLien;
+        uint8 lienCount;
     }
 
     mapping(uint256 => Account) accounts;
+
+    // These indexes should range from 1-4
     //      tokenID            lienID     lien
-    mapping(uint256 => mapping(uint256 => Lien)) secondaryLiens;
+    mapping(uint256 => mapping(uint256 => address)) secondaryLiens;
     mapping(uint256 => string) _tokenURIs;
 
     address private escrow;
-    address private admin;
 
-    constructor(address zyftyRoylatiesAcc, address _escrow)
+    constructor(address _escrow)
         ERC721("ZyftyNFT", "ZNFT")
         {
-        admin = zyftyRoylatiesAcc;
         escrow = _escrow;
     }
     
-    function mint(address recipient, string memory meta_data_uri, address lienProvider, address lienAssetType)
+    function mint(address recipient, string memory meta_data_uri, address _primaryLien)
         public
         returns(uint256)
         {
@@ -58,19 +53,169 @@ contract ZyftyNFT is ERC721, Ownable {
         accounts[newItemId] = Account({
             // uint256 thresholdLien;
             reserve : 0,
-            primaryLien: Lien( // id 0
-                0,
-                lienProvider,
-                true,
-                lienAssetType
-            ),
-            lienCount: Counters.Counter(1),
-            nextLien: Counters.Counter(0)
+            asset: ILien(_primaryLien).asset(),
+            primaryLien: _primaryLien,
+            proposedLien: address(0),
+            lienCount: 1
         });
         
         return newItemId;
     }
 
+    function proposeLien(uint256 tokenID, address lienAddress) public {
+        require(ownerOf(tokenID) == msg.sender, "Must be the owner");
+        Account storage acc = accounts[tokenID];
+        require(acc.lienCount < 4, "No more than 4 liens are allowed");
+        ILien lien = ILien(lienAddress);
+        require(lien.asset() == asset(tokenID), "The asset type of this lien must be the asset type of the contract");
+        accounts[tokenID].proposedLien = lienAddress;
+        emit LienProposed(tokenID, lienAddress);
+    }
+
+    function acceptLien(uint256 id, address confirmLienAddress) public {
+        Account storage acc = accounts[id];
+        require(acc.proposedLien == confirmLienAddress, "Lien address accepted is not the one proposed");
+        ILien lien = ILien(confirmLienAddress);
+        require(msg.sender == lien.lienProvider(), "Only the lien provider can accept this lien");
+
+        acc.lienCount += 1;
+        require(acc.lienCount <= 4, "Only 4 liens are allowed");
+        uint8 maxID = 3;
+        uint256 lienID = 1;
+        // Find next empty slot
+        mapping(uint256 => address) storage lienCopy = secondaryLiens[id];
+        // WARNING, this is very dangerous.
+        // Please ensure 100% that an empty
+        // slot is available when doing this.
+        while (lienCopy[lienID] != address(0)){
+            lienID++;
+        }
+
+        secondaryLiens[id][lienID] = confirmLienAddress;
+        emit LienAdded(id, lienID, confirmLienAddress);
+    }
+
+    function increaseReserve(uint256 tokenID, uint256 amount) public {
+        // Reserve account must use same account as primary lean account
+        // Assuming that the asset type of the primary lien does not change
+        IERC20 token = IERC20(asset(tokenID));
+        token.transferFrom(msg.sender, address(this), amount);
+        accounts[tokenID].reserve += amount;
+    }
+
+    /**
+     * @dev Redeems `amount` from the reserve and gives the value to the owner
+     *      only the owner can access this.
+     *      
+     *      If the amount is greater than the reserve account, then it returns
+     *      all funds from the reserve account instead
+     */
+    function redeemReserve(uint256 tokenID, uint256 amount) public {
+        require(ownerOf(tokenID) == msg.sender);
+        Account storage acc = accounts[tokenID];
+        if (amount > acc.reserve) {
+            amount = acc.reserve;
+        }
+        IERC20(asset(tokenID)).transfer(msg.sender, amount);
+        acc.reserve -= amount;
+    }
+
+    /**
+     * Pulls funds from the reserve account to
+     * fund the primary account first, then
+     * secondary accounts
+     */
+    function balanceAccounts(uint256 tokenID)
+        public
+        {
+        require(msg.sender == ownerOf(tokenID) || msg.sender == escrow);
+        uint8 count = accounts[tokenID].lienCount;
+        uint8 numFound = 0;
+        for (uint256 i = 0; numFound < count; i++) {
+            if (getLien(tokenID, i) != address(0)) {
+                numFound++;
+                payLienFull(tokenID, i);
+            }
+        }
+    }
+
+    /**
+     * Iterates through all the accounts and
+     * updates the lien accounts
+     */
+    function updateLiens(uint256 tokenID)
+        public
+        {
+
+        uint8 count = accounts[tokenID].lienCount;
+        uint8 numFound = 0;
+        for (uint256 i = 0; numFound < count; i++) {
+            address l = getLien(tokenID, i);
+            if (l != address(0)) {
+                numFound++;
+                try ILien(l).update(){}
+                catch{}
+            }
+        }
+    }
+
+    /**
+     * Pays the full amount of the lien used from the reserve account
+     * returns the amount the contract sent to the lien, on error or 
+     * if the lien is fully paid out 0 is returned.
+     */
+    function payLienFull(uint256 tokenID, uint256 lienID)
+        public
+        returns(uint256)
+        {
+        require(msg.sender == ownerOf(tokenID) || msg.sender == escrow, "You must be the owner or the escrow");
+        address lienAddr = getLien(tokenID, lienID);
+        require(lienAddr != address(0), "Lien does not exist");
+        ILien(lienAddr).update();
+        uint256 amount = ILien(lienAddr).balance();
+        return payLien(tokenID, tokenID, amount);
+    }
+
+    /**
+     * Pays the full amount of the lien used from the reserve account
+     * returns the amount the contract sent to the lien, on error or 
+     * if the lien is fully paid out 0 is returned.
+     */
+    function payLien(uint256 tokenID, uint256 lienID, uint256 amount)
+        public
+        returns (uint256)
+        {
+        
+        address lienAddr = getLien(tokenID, lienID);
+        require(lienAddr != address(0), "Lien does not exist");
+        ILien l = ILien(lienAddr);
+        Account storage acc = accounts[tokenID];
+        if (amount > acc.reserve) {
+            amount = acc.reserve;
+        }
+        IERC20(asset(tokenID)).approve(lienAddr, amount);
+        uint256 remainder = l.pay(amount);
+        acc.reserve -= (amount - remainder);
+        return amount - remainder;
+    }
+
+    /**
+     * @dev Removes the lien ID, requires the lienProviders
+     *      permission
+     */
+    function removeLien(uint256 tokenID, uint256 lienID)
+        public 
+        onlyLienProviderOf(tokenID, lienID) {
+
+        require(lienID > 0, "Cannot remove primary Lien");
+        accounts[tokenID].lienCount -= 1;
+        delete secondaryLiens[tokenID][lienID];
+    }
+
+
+    /**
+     * @dev Sets the tokenURI
+     */
     function _setTokenURI(uint256 tokenId, string memory _tokenURI)
       internal
       virtual
@@ -78,124 +223,69 @@ contract ZyftyNFT is ERC721, Ownable {
       _tokenURIs[tokenId] = _tokenURI;
     }
 
-    function addLien(uint256 tokenID, address asset, uint256 value, address provider, bool isDynamic) 
-    public
-    {
-        require(ownerOf(tokenID) == msg.sender);
-        Account storage acc = accounts[tokenID];
-        uint256 num = acc.lienCount.current();
-        require(num < 4, "No more than 4 liens are allowed");
-        acc.lienCount.increment();
-        acc.nextLien.increment();
-        
-        secondaryLiens[tokenID][acc.nextLien.current()] = Lien({
-            value: value, 
-            lienProvider: provider,
-            dynamicCost: isDynamic,
-            assetType: asset
-        });
-    }
-
-    function increaseReserve(uint256 tokenID, uint256 amount) public {
-        // Reserve account must use same account as primary lean account
-        // Assuming that the asset type of the primary lien does not change
-        IERC20 token = IERC20(accounts[tokenID].primaryLien.assetType);
-        token.transferFrom(msg.sender, address(this), amount);
-        accounts[tokenID].reserve += amount;
-    }
-
-    function increaseLien(uint256 tokenID, uint256 lienID, uint256 amount) 
+    function tokenURI(uint256 id)
         public
-        onlyLienProviderOf(tokenID, lienID)
-        {
-        Lien memory l = getLien(tokenID, lienID);
-        require(l.dynamicCost == true, "Lien is parametric cost only");
-        setLien(tokenID, lienID, l.value + amount);
+        override
+        view
+        returns(string memory){
+        return _tokenURIs[id];
     }
 
-    function balanceAccounts(uint256 tokenID)
+    /**
+     * @dev Destroyes the NFT specified by id
+     */
+    function destroyNFT(uint256 id)
         public
         onlyOwner {
-        uint256 res = accounts[tokenID].reserve;
-        Lien memory l = accounts[tokenID].primaryLien;
-        uint256 debt = l.value;
-        IERC20 token = IERC20(l.assetType);
-        if (res > 0 && debt > 0) {
-            if (res >= debt) {
-                // More in reserve account, debt will become zero
-                token.transfer(l.lienProvider, debt);
-                accounts[tokenID].reserve = res - debt;
-                accounts[tokenID].primaryLien.value = 0;
-            } else {
-                // More in debt account, reserve will become zero
-                token.transfer(l.lienProvider, res);
-                accounts[tokenID].reserve = 0;
-                accounts[tokenID].primaryLien.value = debt - res;
-            }
+
+        _burn(id);
+        uint end = 4;
+        for (uint i = 1; i <= end; i++) {
+            delete secondaryLiens[id][i];
         }
+        delete accounts[id];
     }
 
+    /**
+     * @dev Returns the asset type that token `id` uses,
+     *      each NFT only uses a single asset.
+     */
+    function asset(uint256 id)
+        public
+        view
+        returns(address addr) {
+        addr = accounts[id].asset;
+    }
+
+    /**
+     * @dev Returns the account of the tokenID specified
+     */
     function getAccount(uint256 tokenID) 
         public
-        view returns(Account memory){
+        view
+        returns(Account memory){
 
         return accounts[tokenID];
     }
 
-    function payLien(uint256 tokenID, uint256 lienID, uint256 amount)
-        public
-        {
-        if (lienID == 0) {
-            increaseReserve(tokenID, amount);
-            return;
-        }
-
-        Lien storage l = secondaryLiens[tokenID][lienID];
-        IERC20 token = IERC20(l.assetType);
-        token.transferFrom(msg.sender, l.lienProvider, amount);
-
-        if (amount >= l.value && l.dynamicCost) {
-            // Lien is finished, remove it?
-            secondaryLiens[tokenID][lienID].value = 0;
-        } else {
-            secondaryLiens[tokenID][lienID].value = l.value - amount;
-        }
-
-    }
-
-    function removeLien(uint256 tokenID, uint256 lienID)
-        public 
-        onlyLienProviderOf(tokenID, lienID) {
-
-        require(lienID > 0, "Cannot remove primary Lien");
-        delete secondaryLiens[tokenID][lienID];
-    }
-
+    /**
+     * @dev Returns the lien specified by `tokenID` and `lienID`,
+     *      the lienID of the primary lien is 0.
+     */
     function getLien(uint256 tokenID, uint256 lienID)
         public
         view
-        returns(Lien memory)
+        returns(address)
         {
         if (lienID == 0) return accounts[tokenID].primaryLien;
         return secondaryLiens[tokenID][lienID];
     }
 
-    function setLien(uint256 tokenID, uint256 lienID, uint256 value)
-        internal
-        {
-        if (lienID == 0) accounts[tokenID].primaryLien.value = value;
-        else {
-            secondaryLiens[tokenID][lienID].value = value;
-        }
-    }
-
-    function destroyNFT(uint256 id) public onlyOwner {
-        _burn(id);
-        uint end = accounts[id].nextLien.current();
-        for (uint i = 0; i < end; i++) {
-            delete secondaryLiens[id][i];
-        }
-        delete accounts[id];
+    function getReserve(uint256 id) 
+        public
+        view
+        returns (uint256 reserve){
+        reserve = accounts[id].reserve;
     }
 
     function _beforeTokenTransfer(
@@ -208,7 +298,7 @@ contract ZyftyNFT is ERC721, Ownable {
     }
 
     modifier onlyLienProviderOf(uint256 tokenID, uint256 lienID) {
-        require(getLien(tokenID, lienID).lienProvider == msg.sender, "You are not the lien provider");
+        require(ILien(getLien(tokenID, lienID)).lienProvider() == msg.sender, "You are not the lien provider");
         _;
     }
 

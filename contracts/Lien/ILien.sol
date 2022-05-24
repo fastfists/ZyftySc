@@ -14,7 +14,7 @@ interface ILien {
     /**
      * @dev Pays `amount` tokens of the default asset to the `lienProvider()`
      */
-    function pay(uint256 amount) external;
+    function pay(uint256 amount) external returns(uint256);
 
     /**
      * @dev Updates the `balance()` of the lien, this is called

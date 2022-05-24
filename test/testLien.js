@@ -29,12 +29,14 @@ describe("Lien Contracts", function () {
             this.provider.address,
             this.token.address,
             0,
+            0,
             this.lienValue,
             this.period
         );
 
 
         this.buyerStatic = this.lienStatic.connect(this.buyer);
+        this.buyerParametric = this.lienParametric.connect(this.buyer);
     });
 
     it("Static lien finishes successful", async function() {
@@ -74,25 +76,28 @@ describe("Lien Contracts", function () {
         await this.token.connect(this.buyer).approve(this.lienStatic.address, this.lienValue/2);
         await expect(this.buyerStatic.pay(this.lienValue)).to.be.reverted;
 
+        // await this.buyerStatic.upUp();
+
         // Balance should remain the same after transaction
         expect(await this.lienStatic.balance()).to.equal(this.lienValue);
     });
 
     it("Tests parametric lien updates value", async function() {
-        expect(await this.lienParametric.balance()).to.equal(0);
-        sleep(this.period*1000);
+        expect(await this.buyerParametric.balance()).to.equal(0);
+        await sleep((this.period)*1000);
         // Balance should not automatically be updated
-        expect(await this.lienParametric.balance()).to.equal(0);
-        await this.lienParametric.update();
-        expect(await this.lienParametric.balance()).to.equal(this.lienValue);
+        expect(await this.buyerParametric.balance()).to.equal(0);
+        await this.buyerParametric.update();
+        expect(await this.buyerParametric.balance()).to.equal(this.lienValue);
     });
 
     it("Tests parametric lien updates on pay", async function() {
         expect(await this.lienParametric.balance()).to.equal(0);
-        await this.token.connect(this.buyer).approve(this.lienStatic.address, this.tokenBalance);
+        await this.token.connect(this.buyer).approve(this.lienParametric.address, this.tokenBalance);
         // wait 2 periods, value should be lienValue*2
-        sleep(this.period*1000*2);
-        await this.buyerConn.pay(this.tokenBalance);
+        await sleep(this.period*1000);
+        await sleep(this.period*1000);
+        await this.buyerParametric.pay(this.tokenBalance);
 
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.lienValue*2);
     });
