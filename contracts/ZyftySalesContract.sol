@@ -145,8 +145,7 @@ contract ZyftySalesContract is Ownable {
         address buyer =  propertyListing[id].buyer;
         address seller = propertyListing[id].seller;
         require(msg.sender == buyer || msg.sender == seller);
-        // ZyftyNFT nft = ZyftyNFT(propertyListing[id].nftContract);
-        IERC721 nft = IERC721(propertyListing[id].nftContract);
+        ZyftyNFT nft = ZyftyNFT(propertyListing[id].nftContract);
         IERC20 token = IERC20(propertyListing[id].asset);
         uint256 fees = propertyListing[id].price/200;
         // nft.balanceAccounts(propertyListing[id].tokenID); // TODO Test 100%

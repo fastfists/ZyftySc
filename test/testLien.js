@@ -76,8 +76,6 @@ describe("Lien Contracts", function () {
         await this.token.connect(this.buyer).approve(this.lienStatic.address, this.lienValue/2);
         await expect(this.buyerStatic.pay(this.lienValue)).to.be.reverted;
 
-        // await this.buyerStatic.upUp();
-
         // Balance should remain the same after transaction
         expect(await this.lienStatic.balance()).to.equal(this.lienValue);
     });

@@ -15,21 +15,22 @@ describe("RealEstateNFT", function () {
         const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
         const NFT_FACTORY = await hre.ethers.getContractFactory("ZyftyNFT");
         this.LIEN_FACTORY = await hre.ethers.getContractFactory("Lien");
-
         [this.owner, this.lien1P, this.lien2P] = await ethers.getSigners();
 
         this.tokenBalance = 50;
+        this.id = 1;
+        this.idOther = 2;
+        this.lien1Val = 10;
+        this.otherLienValue = 5;
 
         this.nft = await NFT_FACTORY.deploy(this.owner.address);
         this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.lien2P.address, this.tokenBalance);
 
-        this.id = 1;
-        this.idOther = 2;
-        metadataURI = "cid/test.json";
-        this.lien1Val = 10;
-        this.otherLienValue = 5;
         this.lien1 = await this.LIEN_FACTORY.deploy(this.lien1P.address, this.lien1Val, this.token.address)
         this.lien2 = await this.LIEN_FACTORY.deploy(this.lien1P.address, this.lien1Val, this.token.address)
+
+        let metadataURI = "cid/test.json";
+
         await this.nft.connect(this.owner).mint(
             this.owner.address,
             metadataURI,
@@ -55,9 +56,10 @@ describe("RealEstateNFT", function () {
     });
 
     it("Adds a Lien", async function() {
-        let lien2      = await this.LIEN_FACTORY.deploy(this.lien2P.address,      this.otherLienValue, this.token.address);
-        let randomLien = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, this.token.address);
         // ensure that the most recent proposal is used
+        let lien2      = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, this.token.address);
+        let randomLien = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, this.token.address);
+
         await this.ownerConn.proposeLien(this.id, randomLien.address);
         await this.ownerConn.proposeLien(this.id, lien2.address);
 
@@ -169,6 +171,9 @@ describe("RealEstateNFT", function () {
     it("Destroys NFTs", async function() {
         await this.ownerConn.destroyNFT(this.id);
         expect(await this.ownerConn.getLien(this.id, 0)).to.equal("0x0000000000000000000000000000000000000000");
+        expect(await this.ownerConn.getLien(this.id, 1)).to.equal("0x0000000000000000000000000000000000000000");
+        expect(await this.ownerConn.getLien(this.id, 2)).to.equal("0x0000000000000000000000000000000000000000");
+        expect(await this.ownerConn.getLien(this.id, 3)).to.equal("0x0000000000000000000000000000000000000000");
     });
 
 });
