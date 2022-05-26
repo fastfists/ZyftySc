@@ -15,25 +15,29 @@ describe("ZyftySalesContract", function () {
         const ESCROW_FACTORY = await ethers.getContractFactory("ZyftySalesContract");
         const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
         const NFT_FACTORY = await hre.ethers.getContractFactory("ZyftyNFT");
+        this.LIEN_FACTORY = await hre.ethers.getContractFactory("Lien");
 
-        [this.seller, this.buyer, this.lean2Provider, this.zyftyAdmin] = await ethers.getSigners();
+        [this.seller, this.buyer, this.lien1P, this.zyftyAdmin] = await ethers.getSigners();
 
-        this.tokenBalance = 50;
+        this.tokenBalance = 300;
 
         this.time = 5;
         this.escrow = await ESCROW_FACTORY.deploy(this.zyftyAdmin.address);
-        this.nft = await NFT_FACTORY.deploy(this.seller.address);
-        this.token = await TOKEN_FACTORY.deploy(this.seller.address, this.buyer.address, this.lean2Provider.address);
-        this.price = 10;
+        this.nft = await NFT_FACTORY.deploy(this.escrow.address);
+        this.token = await TOKEN_FACTORY.deploy(this.seller.address, this.buyer.address, this.lien1P.address, this.tokenBalance);
+        this.price = 200;
 
         this.id = 1;
         metadataURI = "cid/test.json";
 
+        this.lienVal = 0;
+
+        this.lien = await this.LIEN_FACTORY.deploy(this.lien1P.address, this.lienVal, this.token.address)
+
         await this.nft.connect(this.seller).mint(
             this.seller.address,
             metadataURI,
-            this.seller.address,
-            this.token.address,
+            this.lien.address
         );
 
         await this.nft.connect(this.seller).approve(this.escrow.address, this.id);
@@ -44,12 +48,11 @@ describe("ZyftySalesContract", function () {
         await this.sellerConn.sellProperty(
             this.nft.address, 
             this.id,  // tokenID
-            this.token.address,
             this.price,  // price
             this.time, //time
         );
 
-        await this.token.connect(this.buyer).approve(this.escrow.address, 50);
+        await this.token.connect(this.buyer).approve(this.escrow.address, this.price);
     });
 
     it("Executes escrow succesfully", async function() {
@@ -63,6 +66,7 @@ describe("ZyftySalesContract", function () {
         await this.sellerConn.execute(this.id);
 
         const fee = this.price/200;
+        console.log(await this.token.balanceOf(this.seller.address));
         expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price - fee + this.tokenBalance);
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.price);
 
@@ -81,7 +85,7 @@ describe("ZyftySalesContract", function () {
         await expect(this.sellerConn.execute()).to.be.reverted;
 
         const p = await this.escrow.getProperty(this.id);
-        expect(p.state).to.equal(2); // 2 == CANCELED
+        expect(p.state).to.equal(0); // 0 == DOESN'T Exist
     });
 
     it("Reverts buyer escrow", async function() {
@@ -93,6 +97,12 @@ describe("ZyftySalesContract", function () {
         await expect(this.sellerConn.revertBuyer(this.id)).to.be.reverted;
         await this.buyerConn.revertBuyer(this.id);
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance);
+
+        const p = await this.escrow.getProperty(this.id);
+        expect(p.state).to.equal(3); // 3 == CANCLED
+    });
+
+    it("Pays off lien accounts on Transfer", async function() {
     });
 
 });

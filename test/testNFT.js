@@ -21,7 +21,7 @@ describe("RealEstateNFT", function () {
         this.tokenBalance = 50;
 
         this.nft = await NFT_FACTORY.deploy(this.owner.address);
-        this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.lien2P.address);
+        this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.lien2P.address, this.tokenBalance);
 
         this.id = 1;
         this.idOther = 2;
@@ -106,7 +106,7 @@ describe("RealEstateNFT", function () {
 
     it("Enforces Liens of the same asset", async function() {
         const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
-        let token2 = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.lien2P.address);
+        let token2 = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.lien2P.address, this.tokenBalance);
         // create lien with another token deployed
         let lien = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, token2.address);
 

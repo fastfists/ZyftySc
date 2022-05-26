@@ -294,7 +294,7 @@ contract ZyftyNFT is ERC721, Ownable {
         uint256 tokenID
     ) internal override {
         // Require 1st lien to be satisified
-        require(from == escrow || to == escrow, "Token must be passed through Sales Contract");
+        require(from == address(0) || to == address(0) || from == escrow || to == escrow, "Token must be passed through Sales Contract");
     }
 
     modifier onlyLienProviderOf(uint256 tokenID, uint256 lienID) {

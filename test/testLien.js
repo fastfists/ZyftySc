@@ -23,7 +23,7 @@ describe("Lien Contracts", function () {
         this.lienValue = 10;
         this.period = 5; // Every 5 seconds
 
-        this.token = await TOKEN_FACTORY.deploy(this.ot.address, this.buyer.address, this.provider.address);
+        this.token = await TOKEN_FACTORY.deploy(this.ot.address, this.buyer.address, this.provider.address, this.tokenBalance);
         this.lienStatic = await LIEN_FACTORY.deploy(this.provider.address, this.lienValue, this.token.address);
         this.lienParametric = await PARAMETRIC_LIEN_FACTORY.deploy(
             this.provider.address,

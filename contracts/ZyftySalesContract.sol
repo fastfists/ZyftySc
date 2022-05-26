@@ -9,10 +9,10 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "contracts/ZyftyNFT.sol";
 
 contract TestToken is ERC20 {
-    constructor(address a, address b, address c) ERC20("TestToken", "TT"){
-        _mint(a, 50);
-        _mint(b, 50);
-        _mint(c, 50);
+    constructor(address a, address b, address c, uint256 amount) ERC20("TestToken", "TT"){
+        _mint(a, amount);
+        _mint(b, amount);
+        _mint(c, amount);
     }
 }
 
@@ -22,6 +22,7 @@ contract ZyftySalesContract is Ownable {
     Counters.Counter private _propertyIds;
 
     enum EscrowState {
+        NOT_CREATED, // Have initial state be not created for after clearing
         INITIALIZED,
         FUNDED,
         CANCELED
@@ -52,7 +53,7 @@ contract ZyftySalesContract is Ownable {
         admin = zyftyAdmin;
     }
 
-    function sellProperty(
+    function sellPropertyBuyer(
             address nftContract,
             uint256 tokenId,
             uint256 price,
@@ -64,7 +65,8 @@ contract ZyftySalesContract is Ownable {
         require(nftContract != address(0), "NFT Contract is zero address");
         ZyftyNFT nft = ZyftyNFT(nftContract);
         nft.transferFrom(msg.sender, address(this), tokenId);
-        nft.updateLiens(tokenId);
+        try nft.updateLiens(tokenId) {
+        } catch {}
         _propertyIds.increment();
         uint256 id =_propertyIds.current();
         propertyListing[id] = ListedProperty({nftContract: nftContract,
@@ -87,7 +89,7 @@ contract ZyftySalesContract is Ownable {
             uint256 price,
             uint256 time)
             public {
-        sellProperty(nftContract, tokenId, price, time, address(0));
+        sellPropertyBuyer(nftContract, tokenId, price, time, address(0));
     }
 
     function buyProperty(uint256 id) 
