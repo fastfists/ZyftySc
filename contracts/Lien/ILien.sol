@@ -35,5 +35,5 @@ interface ILien {
      *      `update()` is called before. The value is typically lower
      *      than reality.
      */
-    function balance() external view returns(uint256);
+    function balance() external returns(uint256);
 }

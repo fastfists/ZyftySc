@@ -65,7 +65,8 @@ contract Lien is ILien {
      *      `update()` is called before. The value is typically lower
      *      than reality.
      */
-    function balance() public virtual override view returns(uint256) {
+    function balance() public virtual override returns(uint256) {
+        update();
         return value;
     }
 

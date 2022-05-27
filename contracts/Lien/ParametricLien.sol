@@ -25,9 +25,6 @@ contract ParametricLien is Lien {
         period = _period;
     }
 
-    // (((now - start) / period - ((last - start) / period) )*valuePer
-
-    // valuePer * ( (now - start) - (last - start) ) / period
     function update() public virtual override {
         // Finds the total number of periods since the  start date
         uint256 totalPeriods = (block.timestamp - start) / period;

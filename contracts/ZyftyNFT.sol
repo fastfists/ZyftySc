@@ -14,7 +14,9 @@ contract ZyftyNFT is ERC721, Ownable {
     Counters.Counter private _tokenIds;
 
     event LienAdded(uint256 indexed tokenID, uint256 lienID, address lienAddress);
+    event LienChanged(uint256 indexed tokenID, uint256 lienID, address lienAddress);
     event LienProposed(uint256 indexed tokenID, address lienAddress);
+    event LienChangeProposed(uint256 indexed tokenID, address lienAddress, uint256 position);
 
     struct Account {
         uint256 reserve;
@@ -57,6 +59,7 @@ contract ZyftyNFT is ERC721, Ownable {
             asset: ILien(_primaryLien).asset(),
             primaryLien: _primaryLien,
             proposedLien: address(0),
+            proposedLienSlot: 0,
             lienCount: 1
         });
         
@@ -82,7 +85,7 @@ contract ZyftyNFT is ERC721, Ownable {
      */
     function acceptLienTransfer(uint256 id, address confirmLienAddress) public {
         Account storage acc = accounts[id];
-        require(acc.proposedLienSlot == 0, "This is a lien transfer, cannot confirm through this.");
+        require(acc.proposedLienSlot != 0, "This is a lien transfer, cannot confirm through this.");
         require(acc.proposedLien == confirmLienAddress, "Lien address accepted is not the one proposed");
         ILien lien = ILien(confirmLienAddress);
         require(msg.sender == lien.lienProvider(), "Only the lien provider can accept this lien");
@@ -150,9 +153,10 @@ contract ZyftyNFT is ERC721, Ownable {
         }
 
         secondaryLiens[id][lienID] = confirmLienAddress;
-        acc.confirmLienAddress = address(0);
+        acc.proposedLien = address(0);
         emit LienAdded(id, lienID, confirmLienAddress);
     }
+
 
     function increaseReserve(uint256 tokenID, uint256 amount) public {
         // Reserve account must use same account as primary lean account
@@ -238,8 +242,10 @@ contract ZyftyNFT is ERC721, Ownable {
      */
     function updateLiens(uint256 tokenID)
         public
+        returns(uint256 totalCost)
         {
 
+        totalCost = 0;
         uint8 count = accounts[tokenID].lienCount;
         uint8 numFound = 0;
         for (uint256 i = 0; numFound < count; i++) {
@@ -248,6 +254,7 @@ contract ZyftyNFT is ERC721, Ownable {
                 numFound++;
                 try ILien(l).update(){}
                 catch{}
+                totalCost += ILien(l).balance();
             }
         }
     }
@@ -337,6 +344,21 @@ contract ZyftyNFT is ERC721, Ownable {
         {
         if (lienID == 0) return accounts[tokenID].primaryLien;
         return secondaryLiens[tokenID][lienID];
+    }
+
+    /**
+     * @dev Returns the lien specified by `tokenID` and `lienID`,
+     *      the lienID of the primary lien is 0.
+     */
+    function getSecondaryLiens(uint256 tokenID)
+        public
+        view
+        returns(mapping(uint8 => address) memory)
+        {
+        mapping(uint8 => address) storage addrs;
+        for (uint8 i = 1; i < 4; i++ ) {
+            addrs[i] = getLien(tokenID, i);
+        }
     }
 
     function getReserve(uint256 id) 
