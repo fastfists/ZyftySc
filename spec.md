@@ -11,7 +11,7 @@ into the Zyfty NFTs.
 
 ### NFT Minting Fee
 
-The Zyfty NFT will direct a minting fee of 0.5% of the proceeds of every sale to Zyfty.
+The Zyfty NFT will direct a transfer fee of 0.5% of the proceeds of every sale to Zyfty.
 
 ### Reimbursement Account
 

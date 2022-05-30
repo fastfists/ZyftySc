@@ -252,9 +252,10 @@ contract ZyftyNFT is ERC721, Ownable {
             address l = getLien(tokenID, i);
             if (l != address(0)) {
                 numFound++;
-                try ILien(l).update(){}
+                try ILien(l).balance() returns (uint256 bal) {
+                    totalCost += bal;
+                }
                 catch{}
-                totalCost += ILien(l).balance();
             }
         }
     }
