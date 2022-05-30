@@ -25,15 +25,16 @@ contract Lien is ILien {
      *      
      *      Returns the amount of funds that the transaction did not use.
      */
-    function pay(uint256 amount) public virtual override returns(uint256){
+    function pay(uint256 amount) public virtual override returns(uint256 remainder){
         update();
         IERC20 token = IERC20(asset());
         if (amount >= value) {
             // prevent overflow
+            remainder = amount - value;
             amount = value;
         }
         token.transferFrom(msg.sender, lienProvider(), amount);
-        return decreaseLien(amount);
+        decreaseLien(amount);
     }
     /*
      * @dev Updates the `balance()` of the lien, this is called

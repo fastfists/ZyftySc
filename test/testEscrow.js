@@ -19,6 +19,7 @@ describe("ZyftySalesContract", function () {
 
         [this.seller, this.buyer, this.lien1P, this.zyftyAdmin] = await ethers.getSigners();
 
+
         this.tokenBalance = 300;
 
         this.time = 5;
@@ -63,6 +64,7 @@ describe("ZyftySalesContract", function () {
         expect(await this.token.balanceOf(this.escrow.address)).to.equal(this.price);
 
         await sleep(this.time*1000);
+        expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
         await this.sellerConn.execute(this.id);
 
         const fee = this.price/200;

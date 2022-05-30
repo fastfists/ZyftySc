@@ -174,7 +174,7 @@ contract ZyftyNFT is ERC721, Ownable {
      *      all funds from the reserve account instead
      */
     function redeemReserve(uint256 tokenID, uint256 amount) public {
-        require(ownerOf(tokenID) == msg.sender);
+        require(ownerOf(tokenID) == msg.sender, "You are not the owner");
         Account storage acc = accounts[tokenID];
         if (amount > acc.reserve) {
             amount = acc.reserve;
@@ -197,7 +197,7 @@ contract ZyftyNFT is ERC721, Ownable {
         require(lienAddr != address(0), "Lien does not exist");
         ILien(lienAddr).update();
         uint256 amount = ILien(lienAddr).balance();
-        return payLien(tokenID, tokenID, amount);
+        return payLien(tokenID, lienID, amount);
     }
 
     /**
@@ -268,7 +268,7 @@ contract ZyftyNFT is ERC721, Ownable {
     function balanceAccounts(uint256 tokenID)
         public
         {
-        require(msg.sender == ownerOf(tokenID) || msg.sender == escrow);
+        require(msg.sender == ownerOf(tokenID) || msg.sender == escrow, "You must be the owner");
         uint8 count = accounts[tokenID].lienCount;
         uint8 numFound = 0;
         for (uint256 i = 0; numFound < count; i++) {
@@ -354,12 +354,13 @@ contract ZyftyNFT is ERC721, Ownable {
     function getSecondaryLiens(uint256 tokenID)
         public
         view
-        returns(mapping(uint8 => address) memory)
+        returns(address[] memory)
         {
-        mapping(uint8 => address) storage addrs;
+        address[] memory addrs = new address[](3);
         for (uint8 i = 1; i < 4; i++ ) {
             addrs[i] = getLien(tokenID, i);
         }
+        return addrs;
     }
 
     function getReserve(uint256 id) 
