@@ -1,6 +1,12 @@
 pragma solidity ^0.8.1;
 
 interface ILien {
+
+    /**
+     * @dev Initializes the Lien contract
+     */
+    function initialize() external;
+
     /**
      * @dev Returns the main Lien Provider of this Lien
      */
@@ -31,9 +37,16 @@ interface ILien {
 
     /**
      * @dev Returns the current amount of debt that is in the lien,
+     *      before the balance is returned it additionally calls update()
+     *      on the contract
+     */
+    function balance() external returns(uint256);
+
+    /**
+     * @dev Returns the current amount of debt that is in the lien,
      *      WARNING, this is not ensured to be up to date, unless an
      *      `update()` is called before. The value is typically lower
      *      than reality.
      */
-    function balance() external returns(uint256);
+    function balanceView() external view returns(uint256);
 }

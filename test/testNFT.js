@@ -160,7 +160,7 @@ describe("RealEstateNFT", function () {
 
         const lienAddr = await this.ownerConn.getLien(this.id, 1)
         const l = this.LIEN_FACTORY.attach(lienAddr);
-        expect(await l.balance()).to.equal(0);
+        expect(await l.balanceView()).to.equal(0);
 
         expect(await this.ownerConn.getReserve(this.id)).to.equal(15);
         await this.ownerConn.balanceAccounts(this.id);

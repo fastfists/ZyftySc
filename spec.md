@@ -1,6 +1,6 @@
 # Zyfty Techinal Specification
 
-Zyfty is a solution that provides property ownership in the form of long-term leasees as NFTs.
+Zyfty is a solution that provides property ownership in the form of long-term leases as NFTs.
 
 ## NFT
 
@@ -9,7 +9,7 @@ debt.  Many properties, however, have some liabilities associated with them
 over the life of the property, and this is the purpose of having liens built
 into the Zyfty NFTs.
 
-### NFT Minting Fee
+### NFT Transfer Fee
 
 The Zyfty NFT will direct a transfer fee of 0.5% of the proceeds of every sale to Zyfty.
 
@@ -37,12 +37,71 @@ value will be zero. The other liens (second, third and fourth) are “Secondary
 Liens” and are used if the NFT Owner allows additional liens to be placed on
 the property to secure a loan or for some other agreement.
 
-There are two subtypes of liens. They are:
-- Dynamic Value: A lien that can have value added onto it.
-- Parametric Value: A lien which has its value calculated by an interval, 
-  total time, and a rate.
+##### Lien Interface
 
-The primary lien is a parametric value lien.
+A Lien is a secondary contract that can be sub-typed by a third party. We
+created [Lien](contracts/Lien/Lien.sol) for static liens and
+[ParametricLien](contracts/Lien/ParametricLien.sol) for Liens that increase value based
+on time.
+
+This is flexible allowing thrid parties to create other types of Liens that fit
+the use case.
+
+The primary Lien is a ParametricLien
+
+```sol
+interface ILien {
+
+    /**
+     * @dev Initializes the Lien contract
+     */
+    function initialize() external;
+
+    /**
+     * @dev Returns the main Lien Provider of this Lien
+     */
+    function lienProvider() external view returns(address);
+
+    /**
+     * @dev Sets `lienProvider()` to `newLienProvider`
+     */
+    function setLienProvider(address newLienProvider) external;
+
+    /**
+     * @dev Pays `amount` tokens of the default asset to the `lienProvider()`
+     */
+    function pay(uint256 amount) external returns(uint256);
+
+    /**
+     * @dev Updates the `balance()` of the lien, this is called
+     *      to update temporal logic or any other purposes that
+     *      are static. Update uses increaseLien() and decreaseLien()
+     *      to change the value.
+     */
+    function update() external;
+
+    /**
+     * @dev Returns the asset type of the Lien
+     */
+    function asset() external view returns(address);
+
+    /**
+     * @dev Returns the current amount of debt that is in the lien,
+     *      before the balance is returned it additionally calls update()
+     *      on the contract
+     */
+    function balance() external returns(uint256);
+
+    /**
+     * @dev Returns the current amount of debt that is in the lien,
+     *      WARNING, this is not ensured to be up to date, unless an
+     *      `update()` is called before. The value is typically lower
+     *      than reality.
+     */
+    function balanceView() external view returns(uint256);
+
+}
+```
 
 #### Lien Creation
 
@@ -54,15 +113,14 @@ Agreement.  These increases occur at Zyfty’s discretion or upon interaction
 with a Sales Contract.  Secondary Liens are created by a third party that the
 NFT Owner is entering into an agreement with (like a lender providing a loan
 against an owners NFT).  The NFT Owner must allow a Secondary Lien to be
-placed.  To place a Secondary Lien, the third party will make a call
-to `proposeLien`, specifying a lien value and wallet address of the lien
-provider, what type of asset the lien secures and if the lien is dynamic or
-parametric.  The NFT Owner indicates that they are allowing the lien to be placed
-by calling `confirmLien`, after which they will have no control over the lien.
-The lien can only be removed by the lien holder when the agreement that the
-lien secures has been fulfilled by the NFT Owner, or when the lien is paid by
-the NFT Owner, or by default when the NFT is sold and all of the liens are paid
-from the sale proceeds.
+placed.  To place a Secondary Lien, the NFT owner will make a call
+to `proposeLien`, specifying a lien contract address. The Lien contract address
+must be a sub-type of ILien. The NFT Owner indicates that they are allowing the
+lien to be placed by calling `confirmLien`, after which they will have no
+control over the lien. The lien can only be removed by the lien holder when the
+agreement that the lien secures has been fulfilled by the NFT Owner, or when
+the lien is paid by the NFT Owner, or by default when the NFT is sold and all
+of the liens are paid from the sale proceeds.
 
 ##### Paying Liens
 
@@ -70,14 +128,9 @@ The NFT Owner can pay off the Primary Lien by placing the full amount of the
 Primary Lien in the Reimbursement Account.  After Zyfty draws down the value of
 any payments made on the NFT Owner’s behalf plus any accrued interest, it will
 set the lien value to zero.  The NFT Owner can pay off Secondary Liens by
-sending the lien value to the lien holder, after which the lien holder will
+sending the lien value directly to the lien contract, after which the lien holder will
 remove the lien, or by paying the lien value to the NFT, which will send the
-funds to the lien holder and remove the lien.
-
-##### Increasing Liens
-
-If a lien is dynamic cost, then the lien provider can increase the value of the
-lien as defined by the agreement between the lien provider and the NFT Owner.
+funds to the lien contract and remove the lien when the balance is zeroed out.
 
 ##### Destroying an NFT
 
@@ -115,7 +168,7 @@ seller’s terms of sale “into” the Sales Contract (via sellProperty).  The 
 of sale include the sales price, the non-refundable deposit amount (if any),
 the refundable deposit amount (if any), the buyer’s requirement to agree to all
 the terms of the Lease Agreement and the time allotted for closing. The NFT
-sales price must be enough to pay the 0.5% NFT Minting Fee to Zyfty, to clear
+sales price must be enough to pay the 0.5% NFT Transfer Fee to Zyfty, to clear
 all lien amounts and to pay the gas fee for the transaction, or the property
 cannot be sold.
 
