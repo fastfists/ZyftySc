@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-import "hardhat/console.sol";
 
 import "contracts/ZyftyNFT.sol";
 
@@ -151,7 +150,6 @@ contract ZyftySalesContract is Ownable {
         IERC20 token = IERC20(propertyListing[id].asset);
 
         uint256 fees = propertyListing[id].price/200;
-        console.log("IN Contract", propertyListing[id].price - (nft.updateLiens(propertyListing[id].tokenID) + fees));
         require(propertyListing[id].price - (nft.updateLiens(propertyListing[id].tokenID) + fees) >= 0, "Not enough funds to fully payout, must revert");
         // Approve the transfer to increase the reserve account
         token.approve(propertyListing[id].nftContract, propertyListing[id].price - fees);

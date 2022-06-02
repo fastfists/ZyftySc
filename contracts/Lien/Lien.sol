@@ -22,7 +22,7 @@ contract Lien is ILien {
     /**
      * @dev Initializes the Lien contract
      */
-    function initialize() {}
+    function initialize() public virtual override {}
 
     /*
      * @dev Pays `amount` tokens of the default asset to the `lienProvider()`

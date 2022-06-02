@@ -28,7 +28,7 @@ contract ParametricLien is Lien {
     /**
      * @dev Initializes the Lien contract
      */
-    function initialize() {
+    function initialize() public virtual override {
         start = block.timestamp;
     }
 

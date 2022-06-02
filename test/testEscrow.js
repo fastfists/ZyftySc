@@ -71,7 +71,6 @@ describe("ZyftySalesContract", function () {
         await this.sellerConn.execute(this.id);
 
         const fee = this.price/200;
-        console.log(await this.token.balanceOf(this.seller.address));
         expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price - fee + this.tokenBalance);
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.price);
 
@@ -131,10 +130,6 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Reverts execute when proceeds don't cover lien payments", async function() {
-        const fees = this.price / 200;
-        console.log(fees, this.lienVal, this.price)
-        console.log("In JS", this.price - this.lienVal - fees);
-
         expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
         expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
 
