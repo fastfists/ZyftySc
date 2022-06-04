@@ -73,6 +73,11 @@ contract ZyftyNFT is ERC721, Ownable {
         return newItemId;
     }
 
+    /**
+     * @dev Proposes for a lien at slot 'lienSlot to be updated
+     *      with `newLienAddress`
+     *      
+     */
     function proposeLienTransfer(uint256 tokenID, uint8 lienSlot, address newLienAddress) public {
         require(ILien(getLien(tokenID, lienSlot)).lienProvider() == msg.sender, "You are not the old lien provider");
 
@@ -97,12 +102,11 @@ contract ZyftyNFT is ERC721, Ownable {
         ILien lien = ILien(confirmLienAddress);
         require(msg.sender == lien.lienProvider(), "Only the lien provider can accept this lien");
 
-        acc.lienCount += 1;
-        require(acc.lienCount <= 4, "Only 4 liens are allowed");
         // The lien ID stays the same
         uint256 lienId = secondaryLiens[id][acc.proposedLienSlot].lienId;
         secondaryLiens[id][acc.proposedLienSlot] = AddressPair(confirmLienAddress, lienId);
         acc.proposedLienSlot = 0;
+        acc.proposedLien = address(0);
         emit LienAdded(id, acc.proposedLienSlot, confirmLienAddress);
     }
 
@@ -213,7 +217,7 @@ contract ZyftyNFT is ERC721, Ownable {
         acc.reserve -= (amount - remainder);
         return amount - remainder;
     }
-
+    
     /**
      * @dev Removes the lien ID, requires the lienProviders
      *      permission
@@ -264,12 +268,13 @@ contract ZyftyNFT is ERC721, Ownable {
         payLienFull(tokenID, 0);
         // Sort the three slots
         mapping(uint8 => AddressPair) storage liensCopy = secondaryLiens[tokenID];
-        AddressPair[3] memory pairs;
+        uint8[3] memory indexes = [1, 2, 3];
+        uint256[3] memory nums;
         uint8 i;
         for (i = 1; i <= 3; i++) {
-            pairs[i - 1] = liensCopy[i];
+            nums[i - 1] = liensCopy[i].lienId;
         }
-        uint8[3] memory indexes = insertion_sort(pairs);
+        insertion_sort(nums, indexes);
         for (i = 1; i < 3; i++) {
             uint8 idx = indexes[i];
             if (getLien(tokenID, idx) != address(0))
@@ -278,13 +283,16 @@ contract ZyftyNFT is ERC721, Ownable {
 
     }
 
-    function insertion_sort(AddressPair[3] memory data) internal pure returns(uint8[3] memory){
-        uint8[3] memory indexes = [1, 2, 3];
+    /**
+     * Performs insertion sort on the given address pair `data` and returns
+     * the indexes in order of importance
+     */
+    function insertion_sort(uint256[3] memory data, uint8[3] memory indexes) internal pure {
         for (uint i = 1; i < 3; i++) {
-            AddressPair memory key = data[i];
+            uint256 key = data[i];
             uint8 keyIdx = indexes[i];
             uint j = i - 1;
-            while ((int(j) >= 0) && (data[j].lienId > key.lienId)) {
+            while ((int(j) >= 0) && (data[j] > key)) {
                 data[j + 1] = data[j];
                 indexes[j + 1] = indexes[j];
                 if (j == 0) break;
@@ -293,7 +301,6 @@ contract ZyftyNFT is ERC721, Ownable {
             data[j + 1] = key;
             indexes[j + 1] = keyIdx;
         }
-        return indexes;
     }
 
 
@@ -394,7 +401,7 @@ contract ZyftyNFT is ERC721, Ownable {
         address to,
         uint256 tokenID
     ) internal override {
-        // Require 1st lien to be satisified
+        // Require that this can only be transfered via the escrow contract
         require(from == address(0) || to == address(0) || from == escrow || to == escrow, "Token must be passed through Sales Contract");
     }
 

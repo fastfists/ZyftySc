@@ -18,7 +18,6 @@ contract TestToken is ERC20 {
 }
 
 contract ZyftySalesContract is Ownable {
-    // TODO will there be a unique escrow contract for each person, or just a single escrow contract
     using Counters for Counters.Counter;
     Counters.Counter private _propertyIds;
 
@@ -140,7 +139,7 @@ contract ZyftySalesContract is Ownable {
 
     function execute(uint256 id)
         public
-        afterWindow(id)
+        withinWindow(id)
         inState(id, EscrowState.FUNDED)
         {
         address buyer =  propertyListing[id].buyer;
@@ -149,13 +148,13 @@ contract ZyftySalesContract is Ownable {
         ZyftyNFT nft = ZyftyNFT(propertyListing[id].nftContract);
         IERC20 token = IERC20(propertyListing[id].asset);
 
-        uint256 fees = propertyListing[id].price/200;
-        require(propertyListing[id].price - (nft.updateLiens(propertyListing[id].tokenID) + fees) >= 0, "Not enough funds to fully payout, must revert");
+        uint256 fees = propertyListing[id].price / 200;
+        require(propertyListing[id].price - (nft.updateLiens(propertyListing[id].tokenID) + fees) >= 0, "Not enough funds to fully payout liens, must revert");
         // Approve the transfer to increase the reserve account
         token.approve(propertyListing[id].nftContract, propertyListing[id].price - fees);
         nft.increaseReserve(propertyListing[id].tokenID, propertyListing[id].price - fees);
 
-        nft.balanceAccounts(propertyListing[id].tokenID); // TODO Test 100%
+        nft.balanceAccounts(propertyListing[id].tokenID);
 
         uint256 remainingFunds = nft.getReserve(propertyListing[id].tokenID);
         nft.redeemReserve(propertyListing[id].tokenID, remainingFunds);

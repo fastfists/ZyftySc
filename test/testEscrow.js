@@ -66,7 +66,6 @@ describe("ZyftySalesContract", function () {
         await this.buyerConn.buyProperty(this.id)
         expect(await this.token.balanceOf(this.escrow.address)).to.equal(this.price);
 
-        await sleep(this.time*1000);
         expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
         await this.sellerConn.execute(this.id);
 
@@ -76,8 +75,6 @@ describe("ZyftySalesContract", function () {
 
         expect(await this.nft.balanceOf(this.seller.address)).to.equal(0);
         expect(await this.nft.balanceOf(this.buyer.address)).to.equal(1);
-
-        expect(await this.lien.balanceView()).to.equal(0);
     });
 
     it("Reverts seller escrow", async function() {
@@ -111,33 +108,19 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Pays off primary lien account on Transfer", async function() {
-        expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
-        expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
-
         await this.buyerConn.buyProperty(this.id)
-        expect(await this.token.balanceOf(this.escrow.address)).to.equal(this.price);
 
-        await sleep(this.time*1000);
-        expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
         await this.sellerConn.execute(this.id);
 
         const fee = this.price/200;
         expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price - fee - this.lienVal + this.tokenBalance);
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.price);
 
-        // for next test
-        this.lienVal = this.price;
+        this.lienVal = this.price; // For the next testcase
     });
 
     it("Reverts execute when proceeds don't cover lien payments", async function() {
-        expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
-        expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
-
         await this.buyerConn.buyProperty(this.id)
-        expect(await this.token.balanceOf(this.escrow.address)).to.equal(this.price);
-
-        await sleep(this.time*1000);
-        expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
         await expect(this.sellerConn.execute(this.id)).to.be.reverted;
     });
 
