@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
+
 import "contracts/ZyftyNFT.sol";
 
 contract TestToken is ERC20 {
@@ -17,7 +18,6 @@ contract TestToken is ERC20 {
 }
 
 contract ZyftySalesContract is Ownable {
-    // TODO will there be a unique escrow contract for each person, or just a single escrow contract
     using Counters for Counters.Counter;
     Counters.Counter private _propertyIds;
 
@@ -65,7 +65,7 @@ contract ZyftySalesContract is Ownable {
         require(nftContract != address(0), "NFT Contract is zero address");
         ZyftyNFT nft = ZyftyNFT(nftContract);
         nft.transferFrom(msg.sender, address(this), tokenId);
-        try nft.updateLiens(tokenId) {
+        try nft.updateLien(tokenId) {
         } catch {}
         _propertyIds.increment();
         uint256 id =_propertyIds.current();
@@ -139,7 +139,7 @@ contract ZyftySalesContract is Ownable {
 
     function execute(uint256 id)
         public
-        afterWindow(id)
+        withinWindow(id)
         inState(id, EscrowState.FUNDED)
         {
         address buyer =  propertyListing[id].buyer;
@@ -147,14 +147,25 @@ contract ZyftySalesContract is Ownable {
         require(msg.sender == buyer || msg.sender == seller);
         ZyftyNFT nft = ZyftyNFT(propertyListing[id].nftContract);
         IERC20 token = IERC20(propertyListing[id].asset);
+
         uint256 fees = propertyListing[id].price/200;
+        require(propertyListing[id].price - (nft.updateLien(propertyListing[id].tokenID) + fees) >= 0, "Not enough funds to fully payout, must revert");
+        // Approve the transfer to increase the reserve account
+        token.approve(propertyListing[id].nftContract, propertyListing[id].price - fees);
+        nft.increaseReserve(propertyListing[id].tokenID, propertyListing[id].price - fees);
 
-        uint256 nft.updateLiens(propertyListing[id].tokenID);
+        nft.balanceAccounts(propertyListing[id].tokenID);
 
-        nft.balanceAccounts(propertyListing[id].tokenID); // TODO Test 100%
-        nft.transferFrom(address(this), buyer, propertyListing[id].tokenID);
+        uint256 remainingFunds = nft.getReserve(propertyListing[id].tokenID);
+        nft.redeemReserve(propertyListing[id].tokenID, remainingFunds);
+
+        // Should already hold these fees
         token.transfer(admin, fees);
-        token.transfer(seller, propertyListing[id].price - fees);
+        // Proceeds after liens paid go here
+        token.transfer(seller, remainingFunds);
+
+        // Finally transfer the NFT to the buyer
+        nft.transferFrom(address(this), buyer, propertyListing[id].tokenID);
         emit E_PropertySold(id, seller, buyer);
         // cleanup
         cleanup(id);

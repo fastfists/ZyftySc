@@ -51,69 +51,8 @@ describe("RealEstateNFT", function () {
         await this.token.connect(this.owner).approve(this.nft.address, this.tokenBalance*2);
     });
 
-    it("Expects primay lien lien ID 0", async function() {
-        expect(await this.ownerConn.getLien(this.id, 0)).to.equal(this.lien1.address);
-    });
-
-    it("Adds a Lien", async function() {
-        // ensure that the most recent proposal is used
-        let lien2      = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, this.token.address);
-        let randomLien = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, this.token.address);
-
-        await this.ownerConn.proposeLien(this.id, randomLien.address);
-        await this.ownerConn.proposeLien(this.id, lien2.address);
-
-        // Can't accept this lien
-        await expect(this.p2Conn.acceptLien(this.id, randomLien.address)).to.be.reverted;
-        await expect(this.p2Conn.acceptLien(this.id, lien2.address))
-          .to.emit(this.nft, 'LienAdded')
-          .withArgs(this.id, 1, lien2.address);
-
-        expect(await this.nft.getLien(this.id, 1)).to.equal(lien2.address);
-    });
-
-    it("Limits liens to 4", async function() {
-        // Should have 2 liens right now
-        let lien3 = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, this.token.address);
-        let lien4 = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, this.token.address);
-        let lien5 = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, this.token.address);
-
-        await this.ownerConn.proposeLien(this.id, lien3.address);
-        await this.p2Conn.acceptLien(this.id, lien3.address);
-
-        await this.ownerConn.proposeLien(this.id, lien4.address);
-        await this.p2Conn.acceptLien(this.id, lien4.address);
-
-        await expect(this.ownerConn.proposeLien(this.id, lien5.address)).to.be.reverted;
-        // await this.p2Conn.acceptLien(this.id, lien5.address);
-    });
-
-    it("Removes liens", async function() {
-        await expect(this.p2Conn.removeLien(this.id, 0)).to.be.reverted;
-        expect(await this.p2Conn.getLien(this.id, 2)).to.not.equal(0);
-        await this.p2Conn.removeLien(this.id, 2); // removes lien 3
-        expect(await this.p2Conn.getLien(this.id, 2)).to.equal("0x0000000000000000000000000000000000000000");
-
-        await this.p2Conn.removeLien(this.id, 3); // removes lien 4
-        expect(await this.p2Conn.getLien(this.id, 3)).to.equal("0x0000000000000000000000000000000000000000");
-    });
-
-    it("Adds liens in lowest order", async function() {
-        let lien5 = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, this.token.address);
-        await this.ownerConn.proposeLien(this.id, lien5.address);
-        await this.p2Conn.acceptLien(this.id, lien5.address);
-        // should insert in position of lien3
-        expect(await this.p2Conn.getLien(this.id, 2)).to.equal(lien5.address);
-    });
-
-    it("Enforces Liens of the same asset", async function() {
-        const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
-        let token2 = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.lien2P.address, this.tokenBalance);
-        // create lien with another token deployed
-        let lien = await this.LIEN_FACTORY.deploy(this.lien2P.address, this.otherLienValue, token2.address);
-
-        await expect(this.ownerConn.proposeLien(this.id, lien.address)).to.be
-            .revertedWith("The asset type of this lien must be the asset type of the contract");
+    it("Expects primary lien to exist", async function() {
+        expect(await this.ownerConn.lien(this.id)).to.equal(this.lien1.address);
     });
 
     it("Increases the reseves", async function() {
@@ -151,29 +90,20 @@ describe("RealEstateNFT", function () {
     });
 
     it("Pays assets off with reserves", async function() {
-        // Have 2 leans with value 5 and primary with value 10
-        const amountToPay = 20;
+        // Have 1 lien to pay with value 10
+        const amountToPay = 10;
         await this.ownerConn.increaseReserve(this.id, amountToPay);
 
         // Pay of secondry lien that has value 5, pays the full amount
-        await this.ownerConn.payLienFull(this.id, 1);
+        await this.ownerConn.payLienFull(this.id);
 
-        const lienAddr = await this.ownerConn.getLien(this.id, 1)
-        const l = this.LIEN_FACTORY.attach(lienAddr);
-        expect(await l.balance()).to.equal(0);
-
-        expect(await this.ownerConn.getReserve(this.id)).to.equal(15);
-        await this.ownerConn.balanceAccounts(this.id);
-
+        const l = this.LIEN_FACTORY.attach(this.ownerConn.lien(this.id));
+        expect(await l.balanceView()).to.equal(0);
         expect(await this.ownerConn.getReserve(this.id)).to.equal(0);
     });
 
     it("Destroys NFTs", async function() {
         await this.ownerConn.destroyNFT(this.id);
-        expect(await this.ownerConn.getLien(this.id, 0)).to.equal("0x0000000000000000000000000000000000000000");
-        expect(await this.ownerConn.getLien(this.id, 1)).to.equal("0x0000000000000000000000000000000000000000");
-        expect(await this.ownerConn.getLien(this.id, 2)).to.equal("0x0000000000000000000000000000000000000000");
-        expect(await this.ownerConn.getLien(this.id, 3)).to.equal("0x0000000000000000000000000000000000000000");
+        expect(await this.ownerConn.lien(this.id)).to.equal("0x0000000000000000000000000000000000000000");
     });
-
 });

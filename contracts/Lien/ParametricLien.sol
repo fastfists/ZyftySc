@@ -25,6 +25,13 @@ contract ParametricLien is Lien {
         period = _period;
     }
 
+    /**
+     * @dev Initializes the Lien contract
+     */
+    function initialize() public virtual override {
+        start = block.timestamp;
+    }
+
     function update() public virtual override {
         // Finds the total number of periods since the  start date
         uint256 totalPeriods = (block.timestamp - start) / period;

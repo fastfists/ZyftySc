@@ -19,21 +19,27 @@ contract Lien is ILien {
         value = _value;
     }
 
+    /**
+     * @dev Initializes the Lien contract
+     */
+    function initialize() public virtual override {}
+
     /*
      * @dev Pays `amount` tokens of the default asset to the `lienProvider()`
      *      on payment update() is called 
      *      
      *      Returns the amount of funds that the transaction did not use.
      */
-    function pay(uint256 amount) public virtual override returns(uint256){
+    function pay(uint256 amount) public virtual override returns(uint256 remainder){
         update();
         IERC20 token = IERC20(asset());
         if (amount >= value) {
             // prevent overflow
+            remainder = amount - value;
             amount = value;
         }
         token.transferFrom(msg.sender, lienProvider(), amount);
-        return decreaseLien(amount);
+        decreaseLien(amount);
     }
     /*
      * @dev Updates the `balance()` of the lien, this is called
@@ -59,16 +65,27 @@ contract Lien is ILien {
         return provider;
     }
 
+    /**
+     * @dev Returns the current amount of debt that is in the lien,
+     *      before the balance is returned it additionally calls update()
+     *      on the contract
+     */
+    function balance() public virtual override returns(uint256) {
+        update();
+        return value;
+    }
+
+
     /*
      * @dev Returns the current amount of debt that is in the lien,
      *      WARNING, this is not ensured to be up to date, unless an
      *      `update()` is called before. The value is typically lower
      *      than reality.
      */
-    function balance() public virtual override returns(uint256) {
-        update();
+    function balanceView() public view virtual override returns(uint256) {
         return value;
     }
+
 
     function asset() public virtual override view returns(address) {
         return tokenAddr;

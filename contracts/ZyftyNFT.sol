@@ -13,25 +13,17 @@ contract ZyftyNFT is ERC721, Ownable {
     using Strings for uint256;
     Counters.Counter private _tokenIds;
 
-    event LienAdded(uint256 indexed tokenID, uint256 lienID, address lienAddress);
-    event LienChanged(uint256 indexed tokenID, uint256 lienID, address lienAddress);
-    event LienProposed(uint256 indexed tokenID, address lienAddress);
-    event LienChangeProposed(uint256 indexed tokenID, address lienAddress, uint256 position);
+    event LienUpdateProposed(uint256 indexed tokenID, address lienAddress);
+    event LienUpdated(uint256 indexed tokenID, address oldLienAddress, address newLienAddress);
 
     struct Account {
         uint256 reserve;
         address asset;
         address primaryLien; // id 0
         address proposedLien;
-        uint8 proposedLienSlot;
-        uint8 lienCount;
     }
 
     mapping(uint256 => Account) accounts;
-
-    // These indexes should range from 1-4
-    //      tokenID            lienID     lien
-    mapping(uint256 => mapping(uint256 => address)) secondaryLiens;
     mapping(uint256 => string) _tokenURIs;
 
     address private escrow;
@@ -58,23 +50,24 @@ contract ZyftyNFT is ERC721, Ownable {
             reserve : 0,
             asset: ILien(_primaryLien).asset(),
             primaryLien: _primaryLien,
-            proposedLien: address(0),
-            proposedLienSlot: 0,
-            lienCount: 1
+            proposedLien: address(0)
         });
         
         return newItemId;
     }
 
-    function proposeLienTransfer(uint256 tokenID, uint8 lienID, address newLienAddress) public {
-        require(ILien(getLien(tokenID, lienID)).lienProvider() == msg.sender, "You are not the old lien provider");
-
+    /**
+     * @dev Proposes to update the NFT `tokenID` with address
+     *      `newLienAddress`
+     */
+    function proposeLienUpdate(uint256 tokenID, address newLienAddress) public {
         Account storage acc = accounts[tokenID];
+        require(ILien(acc.primaryLien).lienProvider() == msg.sender, "You are not the old lien provider");
+
         ILien newLien = ILien(newLienAddress);
         require(newLien.asset() == asset(tokenID), "The asset type of this lien must be the asset type of the contract");
         acc.proposedLien = newLienAddress;
-        acc.proposedLienSlot = lienID;
-        emit LienProposed(tokenID, newLienAddress);
+        emit LienUpdateProposed(tokenID, newLienAddress);
     }
 
     /**
@@ -83,81 +76,22 @@ contract ZyftyNFT is ERC721, Ownable {
      *      The lien address must be passed as `confirmLienAddress`. The sender of the message
      *      must be the message sender.
      */
-    function acceptLienTransfer(uint256 id, address confirmLienAddress) public {
+    function acceptLienUpdate(uint256 id, address confirmLienAddress) public {
         Account storage acc = accounts[id];
-        require(acc.proposedLienSlot != 0, "This is a lien transfer, cannot confirm through this.");
+        require(acc.proposedLien != address(0), "No valid lien proposed");
         require(acc.proposedLien == confirmLienAddress, "Lien address accepted is not the one proposed");
         ILien lien = ILien(confirmLienAddress);
         require(msg.sender == lien.lienProvider(), "Only the lien provider can accept this lien");
-
-        acc.lienCount += 1;
-        require(acc.lienCount <= 4, "Only 4 liens are allowed");
-        uint8 maxID = 3;
-        uint256 lienID = 1;
-        // Find next empty slot
-        mapping(uint256 => address) storage lienCopy = secondaryLiens[id];
-        // WARNING, this is very dangerous.
-        // Please ensure 100% that an empty
-        // slot is available when doing this.
-        while (lienCopy[lienID] != address(0)){
-            lienID++;
-        }
-
-        secondaryLiens[id][lienID] = confirmLienAddress;
-        acc.proposedLienSlot = 0;
-        emit LienAdded(id, lienID, confirmLienAddress);
-    }
-
-    /**
-     * @dev Proposes a lien `lienID` for token `tokenID`
-     *      lien.asset() must be the same as `asset(tokenID)`
-     *      If the token already has 4 liens, the transaction
-     *      will be reverted.
-     *      This can only be called by 'ownerOf(tokenID)`
-     */
-    function proposeLien(uint256 tokenID, address lienAddress) public {
-        require(ownerOf(tokenID) == msg.sender, "Must be the owner");
-        Account storage acc = accounts[tokenID];
-        require(acc.lienCount < 4, "No more than 4 liens are allowed");
-        ILien lien = ILien(lienAddress);
-        require(lien.asset() == asset(tokenID), "The asset type of this lien must be the asset type of the contract");
-        acc.proposedLien = lienAddress;
-        acc.proposedLienSlot = 0;
-        emit LienProposed(tokenID, lienAddress);
-    }
-
-    /**
-     * @dev Accepts the currently proposed lien on the
-     *      for the token `id`. The lien address must be passed
-     *      as `confirmLienAddress`. The sender of the message
-     *      must be `lien.lienProvider()`.
-     */
-    function acceptLien(uint256 id, address confirmLienAddress) public {
-        Account storage acc = accounts[id];
-        require(acc.proposedLienSlot == 0, "This is a lien transfer, cannot confirm through this.");
-        require(acc.proposedLien == confirmLienAddress, "Lien address accepted is not the one proposed");
-        ILien lien = ILien(confirmLienAddress);
-        require(msg.sender == lien.lienProvider(), "Only the lien provider can accept this lien");
-
-        acc.lienCount += 1;
-        require(acc.lienCount <= 4, "Only 4 liens are allowed");
-        uint8 maxID = 3;
-        uint256 lienID = 1;
-        // Find next empty slot
-        mapping(uint256 => address) storage lienCopy = secondaryLiens[id];
-        // WARNING, this is very dangerous.
-        // Please ensure 100% that an empty
-        // slot is available when doing this.
-        while (lienCopy[lienID] != address(0)){
-            lienID++;
-        }
-
-        secondaryLiens[id][lienID] = confirmLienAddress;
+        address oldLien = acc.primaryLien;
+        acc.primaryLien = confirmLienAddress;
         acc.proposedLien = address(0);
-        emit LienAdded(id, lienID, confirmLienAddress);
+        emit LienUpdated(id, oldLien, confirmLienAddress);
     }
 
-
+    /**
+     * @dev Increases the reserve of the NFT of id `tokenID`
+     *      by `amount`. The asset used is `asset(tokenID)`
+     */
     function increaseReserve(uint256 tokenID, uint256 amount) public {
         // Reserve account must use same account as primary lean account
         // Assuming that the asset type of the primary lien does not change
@@ -174,7 +108,7 @@ contract ZyftyNFT is ERC721, Ownable {
      *      all funds from the reserve account instead
      */
     function redeemReserve(uint256 tokenID, uint256 amount) public {
-        require(ownerOf(tokenID) == msg.sender);
+        require(ownerOf(tokenID) == msg.sender, "You are not the owner");
         Account storage acc = accounts[tokenID];
         if (amount > acc.reserve) {
             amount = acc.reserve;
@@ -188,16 +122,14 @@ contract ZyftyNFT is ERC721, Ownable {
      * returns the amount the contract sent to the lien, on error or 
      * if the lien is fully paid out 0 is returned.
      */
-    function payLienFull(uint256 tokenID, uint256 lienID)
+    function payLienFull(uint256 tokenID)
         public
         returns(uint256)
         {
-        require(msg.sender == ownerOf(tokenID) || msg.sender == escrow, "You must be the owner or the escrow");
-        address lienAddr = getLien(tokenID, lienID);
-        require(lienAddr != address(0), "Lien does not exist");
-        ILien(lienAddr).update();
-        uint256 amount = ILien(lienAddr).balance();
-        return payLien(tokenID, tokenID, amount);
+        require(msg.sender == ownerOf(tokenID), "You must be the owner or the escrow");
+        ILien lien = ILien(lien(tokenID));
+        uint256 amount = lien.balance();
+        return payLien(tokenID, amount);
     }
 
     /**
@@ -205,13 +137,11 @@ contract ZyftyNFT is ERC721, Ownable {
      * returns the amount the contract sent to the lien, on error or 
      * if the lien is fully paid out 0 is returned.
      */
-    function payLien(uint256 tokenID, uint256 lienID, uint256 amount)
+    function payLien(uint256 tokenID, uint256 amount)
         public
         returns (uint256)
         {
-        
-        address lienAddr = getLien(tokenID, lienID);
-        require(lienAddr != address(0), "Lien does not exist");
+        address lienAddr = lien(tokenID);
         ILien l = ILien(lienAddr);
         Account storage acc = accounts[tokenID];
         if (amount > acc.reserve) {
@@ -222,41 +152,20 @@ contract ZyftyNFT is ERC721, Ownable {
         acc.reserve -= (amount - remainder);
         return amount - remainder;
     }
-
-    /**
-     * @dev Removes the lien ID, requires the lienProviders
-     *      permission
-     */
-    function removeLien(uint256 tokenID, uint256 lienID)
-        public 
-        onlyLienProviderOf(tokenID, lienID) {
-
-        require(lienID > 0, "Cannot remove primary Lien");
-        accounts[tokenID].lienCount -= 1;
-        delete secondaryLiens[tokenID][lienID];
-    }
-
+    
     /**
      * Iterates through all the accounts and
      * updates the lien accounts
      */
-    function updateLiens(uint256 tokenID)
+    function updateLien(uint256 tokenID)
         public
         returns(uint256 totalCost)
         {
-
         totalCost = 0;
-        uint8 count = accounts[tokenID].lienCount;
-        uint8 numFound = 0;
-        for (uint256 i = 0; numFound < count; i++) {
-            address l = getLien(tokenID, i);
-            if (l != address(0)) {
-                numFound++;
-                try ILien(l).update(){}
-                catch{}
-                totalCost += ILien(l).balance();
-            }
+        try ILien(lien(tokenID)).balance() returns (uint256 bal) {
+            totalCost += bal;
         }
+        catch{}
     }
 
     /**
@@ -267,15 +176,9 @@ contract ZyftyNFT is ERC721, Ownable {
     function balanceAccounts(uint256 tokenID)
         public
         {
-        require(msg.sender == ownerOf(tokenID) || msg.sender == escrow);
-        uint8 count = accounts[tokenID].lienCount;
-        uint8 numFound = 0;
-        for (uint256 i = 0; numFound < count; i++) {
-            if (getLien(tokenID, i) != address(0)) {
-                numFound++;
-                payLienFull(tokenID, i);
-            }
-        }
+        require(msg.sender == ownerOf(tokenID) || msg.sender == escrow, "You must be the owner");
+        // Pay out the primary LienAccount
+        payLienFull(tokenID);
     }
 
     /**
@@ -286,10 +189,6 @@ contract ZyftyNFT is ERC721, Ownable {
         onlyOwner {
 
         _burn(id);
-        uint end = 4;
-        for (uint i = 1; i <= end; i++) {
-            delete secondaryLiens[id][i];
-        }
         delete accounts[id];
     }
 
@@ -320,8 +219,7 @@ contract ZyftyNFT is ERC721, Ownable {
      */
     function _setTokenURI(uint256 tokenId, string memory _tokenURI)
       internal
-      virtual
-    {
+      virtual {
       _tokenURIs[tokenId] = _tokenURI;
     }
 
@@ -329,42 +227,25 @@ contract ZyftyNFT is ERC721, Ownable {
         public
         override
         view
-        returns(string memory){
+        returns(string memory) {
         return _tokenURIs[id];
     }
 
     /**
-     * @dev Returns the lien specified by `tokenID` and `lienID`,
-     *      the lienID of the primary lien is 0.
+     * @dev Returns the lien held on the `tokenID`
      */
-    function getLien(uint256 tokenID, uint256 lienID)
+    function lien(uint256 tokenID)
         public
         view
         returns(address)
         {
-        if (lienID == 0) return accounts[tokenID].primaryLien;
-        return secondaryLiens[tokenID][lienID];
-    }
-
-    /**
-     * @dev Returns the lien specified by `tokenID` and `lienID`,
-     *      the lienID of the primary lien is 0.
-     */
-    function getSecondaryLiens(uint256 tokenID)
-        public
-        view
-        returns(mapping(uint8 => address) memory)
-        {
-        mapping(uint8 => address) storage addrs;
-        for (uint8 i = 1; i < 4; i++ ) {
-            addrs[i] = getLien(tokenID, i);
-        }
+        return accounts[tokenID].primaryLien;
     }
 
     function getReserve(uint256 id) 
         public
         view
-        returns (uint256 reserve){
+        returns (uint256 reserve) {
         reserve = accounts[id].reserve;
     }
 
@@ -373,13 +254,8 @@ contract ZyftyNFT is ERC721, Ownable {
         address to,
         uint256 tokenID
     ) internal override {
-        // Require 1st lien to be satisified
+        // Require that this can only be transfered via the escrow contract
         require(from == address(0) || to == address(0) || from == escrow || to == escrow, "Token must be passed through Sales Contract");
-    }
-
-    modifier onlyLienProviderOf(uint256 tokenID, uint256 lienID) {
-        require(ILien(getLien(tokenID, lienID)).lienProvider() == msg.sender, "You are not the lien provider");
-        _;
     }
 
 }
