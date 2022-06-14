@@ -65,7 +65,7 @@ contract ZyftySalesContract is Ownable {
         require(nftContract != address(0), "NFT Contract is zero address");
         ZyftyNFT nft = ZyftyNFT(nftContract);
         nft.transferFrom(msg.sender, address(this), tokenId);
-        try nft.updateLiens(tokenId) {
+        try nft.updateLien(tokenId) {
         } catch {}
         _propertyIds.increment();
         uint256 id =_propertyIds.current();
@@ -148,8 +148,8 @@ contract ZyftySalesContract is Ownable {
         ZyftyNFT nft = ZyftyNFT(propertyListing[id].nftContract);
         IERC20 token = IERC20(propertyListing[id].asset);
 
-        uint256 fees = propertyListing[id].price / 200;
-        require(propertyListing[id].price - (nft.updateLiens(propertyListing[id].tokenID) + fees) >= 0, "Not enough funds to fully payout liens, must revert");
+        uint256 fees = propertyListing[id].price/200;
+        require(propertyListing[id].price - (nft.updateLien(propertyListing[id].tokenID) + fees) >= 0, "Not enough funds to fully payout, must revert");
         // Approve the transfer to increase the reserve account
         token.approve(propertyListing[id].nftContract, propertyListing[id].price - fees);
         nft.increaseReserve(propertyListing[id].tokenID, propertyListing[id].price - fees);

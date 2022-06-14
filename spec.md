@@ -28,24 +28,19 @@ Lien and will bear interest as defined in the Lease Agreement.
 
 #### Liens
 
-A property can hold a total of four liens (limited due to space concerns).
-There are two types of liens. The first type of lien is the ”Primary Lien”.
-The Primary Lien can never be removed and will be an amount equal to the fees
-that were owed but not put into the Reimbursement Account by the NFT Owner as
-required by the lease. If no fees are owed by the NFT Owner the Primary Lien
-value will be zero. The other liens (second, third and fourth) are “Secondary
-Liens” and are used if the NFT Owner allows additional liens to be placed on
-the property to secure a loan or for some other agreement.
+A property has a single primary lien.
+
+This lien is the ”Primary Lien”. The Primary Lien can never be
+removed and will be an amount equal to the fees that were owed but not put into
+the Reimbursement Account by the NFT Owner as required by the lease. If no fees
+are owed by the NFT Owner the Primary Lien value will be zero. 
 
 ##### Lien Interface
 
 A Lien is a secondary contract that can be sub-typed by a third party. We
 created [Lien](contracts/Lien/Lien.sol) for static liens and
-[ParametricLien](contracts/Lien/ParametricLien.sol) for Liens that increase value based
-on time.
-
-This is flexible allowing thrid parties to create other types of Liens that fit
-the use case.
+[ParametricLien](contracts/Lien/ParametricLien.sol) for Liens that increase
+value based on time.
 
 The primary Lien is a ParametricLien
 
@@ -112,15 +107,8 @@ of the overdue fee payments plus accrued interest as defined in the Lease
 Agreement.  These increases occur at Zyfty’s discretion or upon interaction
 with a Sales Contract.  Secondary Liens are created by a third party that the
 NFT Owner is entering into an agreement with (like a lender providing a loan
-against an owners NFT).  The NFT Owner must allow a Secondary Lien to be
-placed.  To place a Secondary Lien, the NFT owner will make a call
-to `proposeLien`, specifying a lien contract address. The Lien contract address
-must be a sub-type of ILien. The NFT Owner indicates that they are allowing the
-lien to be placed by calling `confirmLien`, after which they will have no
-control over the lien. The lien can only be removed by the lien holder when the
-agreement that the lien secures has been fulfilled by the NFT Owner, or when
-the lien is paid by the NFT Owner, or by default when the NFT is sold and all
-of the liens are paid from the sale proceeds.
+against an owners NFT). The NFT Owner must allow a Secondary Lien to be
+placed.
 
 ##### Paying Liens
 
