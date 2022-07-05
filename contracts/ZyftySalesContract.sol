@@ -6,14 +6,16 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
+import "hardhat/console.sol";
+
 
 import "contracts/ZyftyNFT.sol";
 
 contract TestToken is ERC20 {
-    constructor(address a, address b, address c, uint256 amount) ERC20("TestToken", "TT"){
-        _mint(a, amount);
+    constructor(address b, address a, address c, uint256 amount) ERC20("TestToken", "TT"){
         _mint(b, amount);
         _mint(c, amount);
+        _mint(a, amount);
     }
 }
 
@@ -65,7 +67,8 @@ contract ZyftySalesContract is Ownable {
         require(nftContract != address(0), "NFT Contract is zero address");
         ZyftyNFT nft = ZyftyNFT(nftContract);
         nft.transferFrom(msg.sender, address(this), tokenId);
-        try nft.updateLien(tokenId) {
+        ILien l = ILien(nft.lien(tokenId));
+        try l.update() {
         } catch {}
         _propertyIds.increment();
         uint256 id =_propertyIds.current();
@@ -142,19 +145,19 @@ contract ZyftySalesContract is Ownable {
         withinWindow(id)
         inState(id, EscrowState.FUNDED)
         {
-        address buyer =  propertyListing[id].buyer;
-        address seller = propertyListing[id].seller;
-        require(msg.sender == buyer || msg.sender == seller);
+        require(msg.sender == propertyListing[id].buyer || msg.sender == propertyListing[id].seller);
         ZyftyNFT nft = ZyftyNFT(propertyListing[id].nftContract);
         IERC20 token = IERC20(propertyListing[id].asset);
 
         uint256 fees = propertyListing[id].price/200;
-        require(propertyListing[id].price - (nft.updateLien(propertyListing[id].tokenID) + fees) >= 0, "Not enough funds to fully payout, must revert");
+        ILien l = ILien(nft.lien(propertyListing[id].tokenID));
+        require(propertyListing[id].price - (l.balance() + fees) >= 0, "Not enough funds to fully payout liens");
         // Approve the transfer to increase the reserve account
         token.approve(propertyListing[id].nftContract, propertyListing[id].price - fees);
         nft.increaseReserve(propertyListing[id].tokenID, propertyListing[id].price - fees);
 
-        nft.balanceAccounts(propertyListing[id].tokenID);
+        nft.payLien(propertyListing[id].tokenID, l.balance());
+        delete l;
 
         uint256 remainingFunds = nft.getReserve(propertyListing[id].tokenID);
         nft.redeemReserve(propertyListing[id].tokenID, remainingFunds);
@@ -162,11 +165,11 @@ contract ZyftySalesContract is Ownable {
         // Should already hold these fees
         token.transfer(admin, fees);
         // Proceeds after liens paid go here
-        token.transfer(seller, remainingFunds);
+        token.transfer(propertyListing[id].seller, remainingFunds);
 
         // Finally transfer the NFT to the buyer
-        nft.transferFrom(address(this), buyer, propertyListing[id].tokenID);
-        emit E_PropertySold(id, seller, buyer);
+        nft.transferFrom(address(this), propertyListing[id].buyer, propertyListing[id].tokenID);
+        emit E_PropertySold(id, propertyListing[id].seller, propertyListing[id].buyer);
         // cleanup
         cleanup(id);
     }

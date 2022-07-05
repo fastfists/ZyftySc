@@ -1,5 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { calcEthereumTransactionParams } = require("@acala-network/eth-providers")
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -7,15 +8,29 @@ function sleep(ms) {
   });
 }
 
+const txFeePerGas = '199999946752';
+const storageByteDeposit = '100000000000000';
+
 // Tests should be ran on localhost test network
 // Run command `npx hardhat test --network localhost` to test this code
 describe("RealEstateNFT", function () {
 
     before(async function() { 
+
         const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
         const NFT_FACTORY = await hre.ethers.getContractFactory("ZyftyNFT");
         this.LIEN_FACTORY = await hre.ethers.getContractFactory("Lien");
-        [this.owner, this.lien1P, this.lien2P] = await ethers.getSigners();
+
+        const blockNumber = await ethers.provider.getBlockNumber();
+        const ethParams = calcEthereumTransactionParams({
+            gasLimit: '21000010',
+            validUntil: (blockNumber + 100).toString(),
+            storageLimit: '640010',
+            txFeePerGas,
+            storageByteDeposit
+        });
+
+        [this.owner, this.lien1P, this.ot] = await ethers.getSigners();
 
         this.tokenBalance = 50;
         this.id = 1;
@@ -23,28 +38,40 @@ describe("RealEstateNFT", function () {
         this.lien1Val = 10;
         this.otherLienValue = 5;
 
-        this.nft = await NFT_FACTORY.deploy(this.owner.address);
-        this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.lien2P.address, this.tokenBalance);
+        this.nft = await NFT_FACTORY.deploy(this.owner.address, {
+            gasPrice: ethParams.txGasPrice,
+            gasLimit: ethParams.txGasLimit,
+            });
 
-        this.lien1 = await this.LIEN_FACTORY.deploy(this.lien1P.address, this.lien1Val, this.token.address)
-        this.lien2 = await this.LIEN_FACTORY.deploy(this.lien1P.address, this.lien1Val, this.token.address)
+        this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.ot.address, this.tokenBalance, {
+            gasPrice: ethParams.txGasPrice,
+            gasLimit: ethParams.txGasLimit,
+            });
+
+        this.lien1 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address, {
+            gasPrice: ethParams.txGasPrice,
+            gasLimit: ethParams.txGasLimit,
+            })
+        this.lien2 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address, {
+            gasPrice: ethParams.txGasPrice,
+            gasLimit: ethParams.txGasLimit,
+            })
 
         let metadataURI = "cid/test.json";
 
-        await this.nft.connect(this.owner).mint(
+        await this.nft.mint(
             this.owner.address,
             metadataURI,
             this.lien1.address
         );
 
-        await this.nft.connect(this.owner).mint(
+        await this.nft.mint(
             this.owner.address,
             metadataURI,
             this.lien2.address
         );
 
         this.p1Conn = this.nft.connect(this.lien1P);
-        this.p2Conn = this.nft.connect(this.lien2P);
         this.ownerConn = this.nft.connect(this.owner);
 
         // Lets not worry about token allowances
@@ -95,7 +122,7 @@ describe("RealEstateNFT", function () {
         await this.ownerConn.increaseReserve(this.id, amountToPay);
 
         // Pay of secondry lien that has value 5, pays the full amount
-        await this.ownerConn.payLienFull(this.id);
+        await this.ownerConn.payLienFull(this.id, );
 
         const l = this.LIEN_FACTORY.attach(this.ownerConn.lien(this.id));
         expect(await l.balanceView()).to.equal(0);
@@ -104,6 +131,6 @@ describe("RealEstateNFT", function () {
 
     it("Destroys NFTs", async function() {
         await this.ownerConn.destroyNFT(this.id);
-        expect(await this.ownerConn.lien(this.id)).to.equal("0x0000000000000000000000000000000000000000");
+        await expect(this.ownerConn.lien(this.id)).to.be.reverted;
     });
 });

@@ -1,11 +1,15 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { calcEthereumTransactionParams } = require("@acala-network/eth-providers")
 
 function sleep(ms) {
     return new Promise((resolve) => {
         setTimeout(resolve, ms);
     });
 }
+
+const txFeePerGas = '199999946752';
+const storageByteDeposit = '100000000000000';
 
 // Tests should be ran on localhost test network
 // Run command `npx hardhat test --network localhost` to test this code
@@ -23,17 +27,42 @@ describe("Lien Contracts", function () {
         this.lienValue = 10;
         this.period = 5; // Every 5 seconds
 
-        this.token = await TOKEN_FACTORY.deploy(this.ot.address, this.buyer.address, this.provider.address, this.tokenBalance);
-        this.lienStatic = await LIEN_FACTORY.deploy(this.provider.address, this.lienValue, this.token.address);
+        const blockNumber = await ethers.provider.getBlockNumber();
+        const ethParams = calcEthereumTransactionParams({
+            gasLimit: '21000010',
+            validUntil: (blockNumber + 100000).toString(),
+            storageLimit: '640010',
+            txFeePerGas,
+            storageByteDeposit
+        });
+
+
+// const LienAddr ="0x758215B538aF72ED0eBF6fCD353119146c8B7Ef9"
+// const TokenAddr ="0x5489a56DcCa0Dcf5b33cE430354c4DA73Cd00E7f"
+
+        this.token = await TOKEN_FACTORY.deploy(this.ot.address, this.provider.address, this.buyer.address, this.tokenBalance, {
+                gasPrice: ethParams.txGasPrice,
+                gasLimit: ethParams.txGasLimit,
+                });
+        this.lienStatic = await LIEN_FACTORY.deploy(this.provider.address, this.lienValue, this.token.address, {
+                gasPrice: ethParams.txGasPrice,
+                gasLimit: ethParams.txGasLimit,
+                });
+        // this.token = await TOKEN_FACTORY.attach(TokenAddr);
+        // this.lienStatic = await LIEN_FACTORY.attach(LienAddr);
+
+        await this.lienStatic.deployed();
         this.lienParametric = await PARAMETRIC_LIEN_FACTORY.deploy(
             this.provider.address,
             this.token.address,
             0,
             0,
             this.lienValue,
-            this.period
+            this.period, {
+                gasPrice: ethParams.txGasPrice,
+                gasLimit: ethParams.txGasLimit,
+                }
         );
-
 
         this.buyerStatic = this.lienStatic.connect(this.buyer);
         this.buyerParametric = this.lienParametric.connect(this.buyer);
@@ -85,7 +114,8 @@ describe("Lien Contracts", function () {
         await sleep((this.period)*1000);
         // Balance should not automatically be updated
         expect(await this.buyerParametric.balanceView()).to.equal(0);
-        await this.buyerParametric.update();
+        let x = await this.buyerParametric.update();
+        await x.wait();
         expect(await this.buyerParametric.balanceView()).to.equal(this.lienValue);
     });
 

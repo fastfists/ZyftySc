@@ -18,13 +18,12 @@ contract ZyftyNFT is ERC721, Ownable {
 
     struct Account {
         uint256 reserve;
-        address asset;
         address primaryLien; // id 0
         address proposedLien;
+        string tokenURI;
     }
 
     mapping(uint256 => Account) accounts;
-    mapping(uint256 => string) _tokenURIs;
 
     address private escrow;
 
@@ -43,14 +42,12 @@ contract ZyftyNFT is ERC721, Ownable {
 
         uint256 newItemId = _tokenIds.current();
         _mint(recipient, newItemId);
-        _setTokenURI(newItemId, meta_data_uri);
 
         accounts[newItemId] = Account({
-            // uint256 thresholdLien;
             reserve : 0,
-            asset: ILien(_primaryLien).asset(),
             primaryLien: _primaryLien,
-            proposedLien: address(0)
+            proposedLien: address(0),
+            tokenURI: meta_data_uri
         });
         
         return newItemId;
@@ -61,6 +58,7 @@ contract ZyftyNFT is ERC721, Ownable {
      *      `newLienAddress`
      */
     function proposeLienUpdate(uint256 tokenID, address newLienAddress) public {
+        require(_exists(tokenID), "This Token does not exist");
         Account storage acc = accounts[tokenID];
         require(ILien(acc.primaryLien).lienProvider() == msg.sender, "You are not the old lien provider");
 
@@ -93,6 +91,7 @@ contract ZyftyNFT is ERC721, Ownable {
      *      by `amount`. The asset used is `asset(tokenID)`
      */
     function increaseReserve(uint256 tokenID, uint256 amount) public {
+        require(_exists(tokenID), "This Token does not exist");
         // Reserve account must use same account as primary lean account
         // Assuming that the asset type of the primary lien does not change
         IERC20 token = IERC20(asset(tokenID));
@@ -108,6 +107,7 @@ contract ZyftyNFT is ERC721, Ownable {
      *      all funds from the reserve account instead
      */
     function redeemReserve(uint256 tokenID, uint256 amount) public {
+        require(_exists(tokenID), "This Token does not exist");
         require(ownerOf(tokenID) == msg.sender, "You are not the owner");
         Account storage acc = accounts[tokenID];
         if (amount > acc.reserve) {
@@ -141,6 +141,7 @@ contract ZyftyNFT is ERC721, Ownable {
         public
         returns (uint256)
         {
+        require(_exists(tokenID), "This Token does not exist");
         address lienAddr = lien(tokenID);
         ILien l = ILien(lienAddr);
         Account storage acc = accounts[tokenID];
@@ -153,34 +154,6 @@ contract ZyftyNFT is ERC721, Ownable {
         return amount - remainder;
     }
     
-    /**
-     * Iterates through all the accounts and
-     * updates the lien accounts
-     */
-    function updateLien(uint256 tokenID)
-        public
-        returns(uint256 totalCost)
-        {
-        totalCost = 0;
-        try ILien(lien(tokenID)).balance() returns (uint256 bal) {
-            totalCost += bal;
-        }
-        catch{}
-    }
-
-    /**
-     * Pulls funds from the reserve account to
-     * fund the primary account first, then
-     * secondary accounts
-     */
-    function balanceAccounts(uint256 tokenID)
-        public
-        {
-        require(msg.sender == ownerOf(tokenID) || msg.sender == escrow, "You must be the owner");
-        // Pay out the primary LienAccount
-        payLienFull(tokenID);
-    }
-
     /**
      * @dev Destroyes the NFT specified by id
      */
@@ -200,7 +173,8 @@ contract ZyftyNFT is ERC721, Ownable {
         public
         view
         returns(address addr) {
-        addr = accounts[id].asset;
+        require(_exists(id), "This Token does not exist");
+        addr = ILien(accounts[id].primaryLien).asset();
     }
 
     /**
@@ -214,21 +188,12 @@ contract ZyftyNFT is ERC721, Ownable {
         return accounts[tokenID];
     }
 
-    /**
-     * @dev Sets the tokenURI
-     */
-    function _setTokenURI(uint256 tokenId, string memory _tokenURI)
-      internal
-      virtual {
-      _tokenURIs[tokenId] = _tokenURI;
-    }
-
     function tokenURI(uint256 id)
         public
         override
         view
         returns(string memory) {
-        return _tokenURIs[id];
+        return accounts[id].tokenURI;
     }
 
     /**
@@ -239,6 +204,7 @@ contract ZyftyNFT is ERC721, Ownable {
         view
         returns(address)
         {
+        require(_exists(tokenID), "This Token does not exist");
         return accounts[tokenID].primaryLien;
     }
 
@@ -246,6 +212,7 @@ contract ZyftyNFT is ERC721, Ownable {
         public
         view
         returns (uint256 reserve) {
+        require(_exists(id), "This Token does not exist");
         reserve = accounts[id].reserve;
     }
 
