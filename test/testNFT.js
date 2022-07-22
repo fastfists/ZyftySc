@@ -1,5 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const hre = require('hardhat');
 const { calcEthereumTransactionParams } = require("@acala-network/eth-providers")
 
 function sleep(ms) {
@@ -30,7 +31,7 @@ describe("RealEstateNFT", function () {
             storageByteDeposit
         });
 
-        [this.owner, this.lien1P, this.ot] = await ethers.getSigners();
+        [this.owner, this.lien1P, this.ot, this.escrow] = await ethers.getSigners();
 
         this.tokenBalance = 50;
         this.id = 1;
@@ -38,37 +39,49 @@ describe("RealEstateNFT", function () {
         this.lien1Val = 10;
         this.otherLienValue = 5;
 
-        this.nft = await NFT_FACTORY.deploy(this.owner.address, {
-            gasPrice: ethParams.txGasPrice,
-            gasLimit: ethParams.txGasLimit,
-            });
 
-        this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.ot.address, this.tokenBalance, {
-            gasPrice: ethParams.txGasPrice,
-            gasLimit: ethParams.txGasLimit,
-            });
+        if (hre.network.name == "mandala") {
+            this.nft = await NFT_FACTORY.deploy(this.escrow.address, {
+                gasPrice: ethParams.txGasPrice,
+                gasLimit: ethParams.txGasLimit,
+                });
 
-        this.lien1 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address, {
-            gasPrice: ethParams.txGasPrice,
-            gasLimit: ethParams.txGasLimit,
-            })
-        this.lien2 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address, {
-            gasPrice: ethParams.txGasPrice,
-            gasLimit: ethParams.txGasLimit,
-            })
+            this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.ot.address, this.tokenBalance, {
+                gasPrice: ethParams.txGasPrice,
+                gasLimit: ethParams.txGasLimit,
+                });
+
+            this.lien1 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address, {
+                gasPrice: ethParams.txGasPrice,
+                gasLimit: ethParams.txGasLimit,
+                })
+            this.lien2 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address, {
+                gasPrice: ethParams.txGasPrice,
+                gasLimit: ethParams.txGasLimit,
+                })
+        } else {
+            this.nft = await NFT_FACTORY.deploy(this.escrow.address);
+
+            this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.ot.address, this.tokenBalance);
+
+            this.lien1 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address)
+            this.lien2 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address)
+        }
 
         let metadataURI = "cid/test.json";
 
         await this.nft.mint(
             this.owner.address,
             metadataURI,
-            this.lien1.address
+            this.lien1.address,
+            "lease-hash"
         );
 
         await this.nft.mint(
             this.owner.address,
             metadataURI,
-            this.lien2.address
+            this.lien2.address,
+            "lease-hash"
         );
 
         this.p1Conn = this.nft.connect(this.lien1P);
@@ -128,6 +141,21 @@ describe("RealEstateNFT", function () {
         expect(await l.balanceView()).to.equal(0);
         expect(await this.ownerConn.getReserve(this.id)).to.equal(0);
     });
+
+    it("Disallows non escrow contracts to transfer", async function() {
+        await expect(this.nft.connect(this.owner).transferFrom(this.owner.address, this.ot.address, this.idOther)).to.be.revertedWith("Token must be passed through Sales Contract");
+    });
+
+    it("Allow to transfer to escrow", async function() {
+        await this.nft.connect(this.owner).transferFrom(this.owner.address, this.escrow.address, this.idOther)
+        expect(await this.nft.ownerOf(this.idOther)).to.equal(this.escrow.address);
+    })
+
+    it("Update allowed escrow", async function(){
+        await this.nft.updateEscrow(this.ot.address);
+        await this.nft.connect(this.owner).transferFrom(this.owner.address, this.ot.address, this.id);
+        expect(await this.nft.ownerOf(this.id)).to.equal(this.ot.address);
+    })
 
     it("Destroys NFTs", async function() {
         await this.ownerConn.destroyNFT(this.id);

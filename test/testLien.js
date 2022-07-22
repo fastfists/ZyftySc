@@ -1,5 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const hre = require('hardhat');
 const { calcEthereumTransactionParams } = require("@acala-network/eth-providers")
 
 function sleep(ms) {
@@ -26,6 +27,9 @@ describe("Lien Contracts", function () {
         this.tokenBalance = 50;
         this.lienValue = 10;
         this.period = 5; // Every 5 seconds
+        if (hre.network.name == "mandala" || hre.network.name == "matic") {
+            this.period = 20;
+        }
 
         const blockNumber = await ethers.provider.getBlockNumber();
         const ethParams = calcEthereumTransactionParams({
@@ -36,33 +40,38 @@ describe("Lien Contracts", function () {
             storageByteDeposit
         });
 
-
-// const LienAddr ="0x758215B538aF72ED0eBF6fCD353119146c8B7Ef9"
-// const TokenAddr ="0x5489a56DcCa0Dcf5b33cE430354c4DA73Cd00E7f"
-
-        this.token = await TOKEN_FACTORY.deploy(this.ot.address, this.provider.address, this.buyer.address, this.tokenBalance, {
-                gasPrice: ethParams.txGasPrice,
-                gasLimit: ethParams.txGasLimit,
-                });
-        this.lienStatic = await LIEN_FACTORY.deploy(this.provider.address, this.lienValue, this.token.address, {
-                gasPrice: ethParams.txGasPrice,
-                gasLimit: ethParams.txGasLimit,
-                });
-        // this.token = await TOKEN_FACTORY.attach(TokenAddr);
-        // this.lienStatic = await LIEN_FACTORY.attach(LienAddr);
-
-        await this.lienStatic.deployed();
-        this.lienParametric = await PARAMETRIC_LIEN_FACTORY.deploy(
-            this.provider.address,
-            this.token.address,
-            0,
-            0,
-            this.lienValue,
-            this.period, {
-                gasPrice: ethParams.txGasPrice,
-                gasLimit: ethParams.txGasLimit,
-                }
-        );
+        if (hre.network.name == "mandala") {
+            this.token = await TOKEN_FACTORY.deploy(this.ot.address, this.provider.address, this.buyer.address, this.tokenBalance, {
+                    gasPrice: ethParams.txGasPrice,
+                    gasLimit: ethParams.txGasLimit,
+                    });
+            this.lienStatic = await LIEN_FACTORY.deploy(this.provider.address, this.lienValue, this.token.address, {
+                    gasPrice: ethParams.txGasPrice,
+                    gasLimit: ethParams.txGasLimit,
+                    });
+            this.lienParametric = await PARAMETRIC_LIEN_FACTORY.deploy(
+                this.provider.address,
+                this.token.address,
+                0,
+                0,
+                this.lienValue,
+                this.period, {
+                    gasPrice: ethParams.txGasPrice,
+                    gasLimit: ethParams.txGasLimit,
+                    }
+            );
+        } else {
+            this.token = await TOKEN_FACTORY.deploy(this.ot.address, this.provider.address, this.buyer.address, this.tokenBalance);
+            this.lienStatic = await LIEN_FACTORY.deploy(this.provider.address, this.lienValue, this.token.address);
+            this.lienParametric = await PARAMETRIC_LIEN_FACTORY.deploy(
+                this.provider.address,
+                this.token.address,
+                0,
+                0,
+                this.lienValue,
+                this.period
+            );
+        }
 
         this.buyerStatic = this.lienStatic.connect(this.buyer);
         this.buyerParametric = this.lienParametric.connect(this.buyer);
@@ -111,11 +120,11 @@ describe("Lien Contracts", function () {
 
     it("Tests parametric lien updates value", async function() {
         expect(await this.buyerParametric.balanceView()).to.equal(0);
-        await sleep((this.period)*1000);
+        await sleep((this.period + 2)*1000);
         // Balance should not automatically be updated
         expect(await this.buyerParametric.balanceView()).to.equal(0);
-        let x = await this.buyerParametric.update();
-        await x.wait();
+        let r = await this.buyerParametric.update();
+        await r.wait();
         expect(await this.buyerParametric.balanceView()).to.equal(this.lienValue);
     });
 
@@ -123,8 +132,7 @@ describe("Lien Contracts", function () {
         expect(await this.lienParametric.balanceView()).to.equal(0);
         await this.token.connect(this.buyer).approve(this.lienParametric.address, this.tokenBalance);
         // wait 2 periods, value should be lienValue*2
-        await sleep(this.period*1000);
-        await sleep(this.period*1000);
+        await sleep((this.period*2 + 2)*1000);
         await this.buyerParametric.pay(this.tokenBalance);
 
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.lienValue*2);

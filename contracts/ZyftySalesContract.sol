@@ -95,11 +95,14 @@ contract ZyftySalesContract is Ownable {
         sellPropertyBuyer(nftContract, tokenId, price, time, address(0));
     }
 
-    function buyProperty(uint256 id) 
+    // hash identifying_info_hash, nft_physical_contract_hash signature 
+    function buyProperty(uint256 id, bytes32 lease_contract_hash, bytes32 )
         public
         inState(id, EscrowState.INITIALIZED)
         withinWindow(id)
         {
+        keccak256(lease_contract_hash)
+        // message should be 
         require(propertyListing[id].buyer == address(0)
             || msg.sender == propertyListing[id].buyer,
             "You are not authorized to buy this");

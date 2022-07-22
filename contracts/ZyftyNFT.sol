@@ -8,6 +8,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "contracts/Lien/ILien.sol";
 
+import "hardhat/console.sol";
+
 contract ZyftyNFT is ERC721, Ownable {
     using Counters for Counters.Counter;
     using Strings for uint256;
@@ -21,6 +23,7 @@ contract ZyftyNFT is ERC721, Ownable {
         address primaryLien; // id 0
         address proposedLien;
         string tokenURI;
+        bytes32 _leaseHash;
     }
 
     mapping(uint256 => Account) accounts;
@@ -32,8 +35,16 @@ contract ZyftyNFT is ERC721, Ownable {
         {
         escrow = _escrow;
     }
+
+    function currentEscrow() public view returns(address e) {
+        e = escrow;
+    }
+
+    function updateEscrow(address _escrow) public onlyOwner {
+        escrow = _escrow;
+    }
     
-    function mint(address recipient, string memory meta_data_uri, address _primaryLien)
+    function mint(address recipient, string memory meta_data_uri, address _primaryLien, bytes32 lease_hash)
         public
         returns(uint256)
         {
@@ -47,7 +58,8 @@ contract ZyftyNFT is ERC721, Ownable {
             reserve : 0,
             primaryLien: _primaryLien,
             proposedLien: address(0),
-            tokenURI: meta_data_uri
+            tokenURI: meta_data_uri,
+            _leaseHash: lease_hash
         });
         
         return newItemId;
@@ -206,6 +218,15 @@ contract ZyftyNFT is ERC721, Ownable {
         {
         require(_exists(tokenID), "This Token does not exist");
         return accounts[tokenID].primaryLien;
+    }
+
+    function leaseHash(uint256 tokenID)
+        public
+        view
+        returns(string memory)
+    {
+        require(_exists(tokenID), "This Token does not exist");
+        return accounts[tokenID]._leaseHash;
     }
 
     function getReserve(uint256 id) 
